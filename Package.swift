@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "Ditto",
+    name: "Pastie",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "Ditto", targets: ["Ditto"])
+        .executable(name: "Pastie", targets: ["Pastie"])
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.24.0"),
@@ -13,17 +13,17 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "Ditto",
+            name: "Pastie",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
                 "HotKey"
             ],
-            path: "Sources/Ditto"
+            path: "Sources/Pastie"
         ),
         .testTarget(
-            name: "DittoTests",
-            dependencies: ["Ditto"],
-            path: "Tests/DittoTests"
+            name: "PastieTests",
+            dependencies: ["Pastie"],
+            path: "Tests/PastieTests"
         )
     ]
 )

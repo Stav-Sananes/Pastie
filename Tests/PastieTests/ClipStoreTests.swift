@@ -1,7 +1,7 @@
-// Tests/DittoTests/ClipStoreTests.swift
+// Tests/PastieTests/ClipStoreTests.swift
 import XCTest
 import GRDB
-@testable import Ditto
+@testable import Pastie
 
 final class ClipStoreTests: XCTestCase {
     func testClipContentEquality() {
