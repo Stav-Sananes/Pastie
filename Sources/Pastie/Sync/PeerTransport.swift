@@ -22,6 +22,7 @@ final class NWConnectionTransport: PeerTransport {
     private let connection: NWConnection
     private let decoder = FrameDecoder()
     private let queue: DispatchQueue
+    private var isClosed = false
 
     init(connection: NWConnection, peerID: String, peerName: String, queue: DispatchQueue) {
         self.connection = connection
@@ -34,7 +35,7 @@ final class NWConnectionTransport: PeerTransport {
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .failed, .cancelled:
-                self?.onClose?()
+                self?.close()
             default:
                 break
             }
@@ -78,6 +79,9 @@ final class NWConnectionTransport: PeerTransport {
     }
 
     func close() {
+        guard !isClosed else { return }
+        isClosed = true
+        connection.stateUpdateHandler = nil
         connection.cancel()
         onClose?()
     }
