@@ -35,7 +35,7 @@ final class NWConnectionTransport: PeerTransport {
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .failed, .cancelled:
-                self?.close()
+                self?.closeOnQueue()
             default:
                 break
             }
@@ -57,13 +57,13 @@ final class NWConnectionTransport: PeerTransport {
                     // A desynced or hostile stream: drop the connection rather than
                     // guess at resyncing the framing. Discovery will re-establish it.
                     NSLog("NWConnectionTransport: framing error from \(self.peerName): \(error)")
-                    self.close()
+                    self.closeOnQueue()
                     return
                 }
             }
 
             if isComplete || error != nil {
-                self.close()
+                self.closeOnQueue()
                 return
             }
             self.receiveLoop()
@@ -79,6 +79,21 @@ final class NWConnectionTransport: PeerTransport {
     }
 
     func close() {
+        // Hop onto `queue` — the same serial queue NWConnection drives its own
+        // stateUpdateHandler/receive callbacks on — so the isClosed check-and-set
+        // below is never racing an internal teardown path. Captures self strongly
+        // (not weak): a caller that calls close() and immediately drops its last
+        // reference must still get exactly one onClose callback, not zero.
+        queue.async {
+            self.closeOnQueue()
+        }
+    }
+
+    /// Must only be called while running on `queue`. Idempotent: onClose fires
+    /// exactly once no matter how many teardown paths call this or how many
+    /// times close() itself is called.
+    private func closeOnQueue() {
+        dispatchPrecondition(condition: .onQueue(queue))
         guard !isClosed else { return }
         isClosed = true
         connection.stateUpdateHandler = nil
