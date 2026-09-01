@@ -10,7 +10,14 @@ struct PreferencesView: View {
             Section("Excluded Apps") {
                 List {
                     ForEach(viewModel.excludedBundleIDs, id: \.self) { id in
-                        Text(id)
+                        HStack {
+                            Text(id)
+                            Spacer()
+                            Button("Remove") {
+                                guard let index = viewModel.excludedBundleIDs.firstIndex(of: id) else { return }
+                                viewModel.removeExcluded(at: IndexSet(integer: index))
+                            }
+                        }
                     }
                     .onDelete(perform: viewModel.removeExcluded)
                 }
