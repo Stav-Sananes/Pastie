@@ -104,4 +104,65 @@ extension ClipStoreTests {
         XCTAssertEqual(all.count, 1)
         XCTAssertEqual(all.first?.textContent, "pinned")
     }
+
+    func testInsertPreservesUUIDAndOriginDevice() throws {
+        let store = try makeStore()
+        let clip = Clip(id: nil, uuid: "fixed-uuid-1", type: .text, textContent: "hi", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0, originDevice: "device-A")
+        _ = try store.insert(clip)
+
+        let all = try store.fetchAll()
+        XCTAssertEqual(all.first?.uuid, "fixed-uuid-1")
+        XCTAssertEqual(all.first?.originDevice, "device-A")
+    }
+
+    func testClipExistsByUUID() throws {
+        let store = try makeStore()
+        _ = try store.insert(Clip(id: nil, uuid: "known", type: .text, textContent: "x", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+
+        XCTAssertTrue(try store.clipExists(uuid: "known"))
+        XCTAssertFalse(try store.clipExists(uuid: "unknown"))
+    }
+
+    func testDefaultUUIDIsGeneratedAndUnique() throws {
+        let store = try makeStore()
+        let a = try store.insert(Clip(id: nil, type: .text, textContent: "a", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+        let b = try store.insert(Clip(id: nil, type: .text, textContent: "b", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+
+        XCTAssertFalse(a.uuid.isEmpty)
+        XCTAssertNotEqual(a.uuid, b.uuid)
+        XCTAssertNil(a.originDevice)
+    }
+
+    func testMigrationBackfillsUUIDOnPreExistingRows() throws {
+        // Simulate a v1 database: create the v1 schema and insert a row with no uuid column,
+        // then open it through ClipStore (which runs both migrations) and confirm backfill.
+        let dbQueue = try DatabaseQueue()
+        try dbQueue.write { db in
+            try db.create(table: "clip") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("type", .text).notNull()
+                t.column("textContent", .text)
+                t.column("imageData", .blob)
+                t.column("filePath", .text)
+                t.column("sourceApp", .text)
+                t.column("timestamp", .datetime).notNull()
+                t.column("pinned", .boolean).notNull().defaults(to: false)
+                t.column("sortOrder", .integer).notNull().defaults(to: 0)
+            }
+            // Mark migration 1 as already applied so ClipStore only runs migration 2.
+            try db.execute(sql: "CREATE TABLE IF NOT EXISTS grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)")
+            try db.execute(sql: "INSERT INTO grdb_migrations (identifier) VALUES ('createClip')")
+            try db.execute(sql: """
+                INSERT INTO clip (type, textContent, timestamp, pinned, sortOrder)
+                VALUES ('text', 'legacy row', ?, 0, 0)
+                """, arguments: [Date()])
+        }
+
+        let store = try ClipStore(dbQueue: dbQueue, retentionCount: 500)
+
+        let all = try store.fetchAll()
+        XCTAssertEqual(all.count, 1)
+        XCTAssertFalse(all[0].uuid.isEmpty, "migration must backfill a uuid on pre-existing rows")
+        XCTAssertNil(all[0].originDevice)
+    }
 }
