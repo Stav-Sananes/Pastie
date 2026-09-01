@@ -10,6 +10,9 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     private var scrollView: NSScrollView!
     private var allClips: [Clip] = []
     private var filteredClips: [Clip] = []
+    /// The app that was frontmost right before Pastie activated itself, so pasteSelection()
+    /// can hand focus back to it before simulating ⌘V.
+    private var previousApp: NSRunningApplication?
 
     init(store: ClipStore, pasteEngine: PasteEngine) {
         self.store = store
@@ -64,6 +67,7 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     }
 
     func show() {
+        previousApp = NSWorkspace.shared.frontmostApplication
         refresh()
         panel.center()
         panel.makeKeyAndOrderFront(nil)
@@ -104,10 +108,18 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         let indexes = tableView.selectedRowIndexes
         guard !indexes.isEmpty else { return }
         let selection = indexes.map { filteredClips[$0] }
-        let pasted = pasteEngine.paste(selection)
+
+        // Hide Pastie and hand focus back to whatever app the user was in BEFORE simulating
+        // ⌘V — otherwise the keystroke goes to the still-key Pastie panel instead of the
+        // target app. Give the target app's focus a moment to settle before pasting.
         hide()
-        if !pasted {
-            showAccessibilityFallbackAlert()
+        previousApp?.activate(options: [])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self else { return }
+            let pasted = self.pasteEngine.paste(selection)
+            if !pasted {
+                self.showAccessibilityFallbackAlert()
+            }
         }
     }
 
