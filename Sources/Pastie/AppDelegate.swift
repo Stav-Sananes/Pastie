@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let window = NSWindow(contentViewController: hosting)
             window.title = "Pastie Preferences"
             window.styleMask = [.titled, .closable]
+            window.isReleasedWhenClosed = false
             preferencesWindow = window
         }
         preferencesWindow?.makeKeyAndOrderFront(nil)
