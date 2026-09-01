@@ -34,6 +34,7 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         searchField = NSSearchField(frame: NSRect(x: 8, y: 320, width: 404, height: 24))
         searchField.target = self
         searchField.action = #selector(searchChanged)
+        searchField.delegate = self
 
         tableView = NSTableView(frame: .zero)
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("clip"))
@@ -82,10 +83,21 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     private func applyFilter() {
         filteredClips = ClipSearch.filter(allClips, query: searchField.stringValue)
         tableView.reloadData()
+        if !filteredClips.isEmpty {
+            tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        }
     }
 
     @objc private func searchChanged() {
         applyFilter()
+    }
+
+    private func moveSelection(by delta: Int) {
+        guard !filteredClips.isEmpty else { return }
+        let current = tableView.selectedRow
+        let next = current < 0 ? 0 : max(0, min(filteredClips.count - 1, current + delta))
+        tableView.selectRowIndexes(IndexSet(integer: next), byExtendingSelection: false)
+        tableView.scrollRowToVisible(next)
     }
 
     @objc private func pasteSelection() {
@@ -126,6 +138,27 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     // NSWindowDelegate
     func windowDidResignKey(_ notification: Notification) {
         hide()
+    }
+}
+
+extension PopupWindowController: NSSearchFieldDelegate {
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        switch commandSelector {
+        case #selector(NSResponder.moveUp(_:)):
+            moveSelection(by: -1)
+            return true
+        case #selector(NSResponder.moveDown(_:)):
+            moveSelection(by: 1)
+            return true
+        case #selector(NSResponder.insertNewline(_:)):
+            pasteSelection()
+            return true
+        case #selector(NSResponder.cancelOperation(_:)):
+            hide()
+            return true
+        default:
+            return false
+        }
     }
 }
 
