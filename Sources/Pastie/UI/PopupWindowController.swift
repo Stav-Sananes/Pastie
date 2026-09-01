@@ -55,6 +55,7 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         tableView.allowsMultipleSelection = true
         tableView.target = self
         tableView.doubleAction = #selector(pasteSelection)
+        tableView.menu = buildContextMenu()
 
         scrollView = NSScrollView(frame: NSRect(x: 8, y: 8, width: 404, height: 304))
         scrollView.documentView = tableView
@@ -175,15 +176,32 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     }
 
     func togglePin(at row: Int) {
-        guard row < filteredClips.count, let id = filteredClips[row].id else { return }
+        guard row >= 0, row < filteredClips.count, let id = filteredClips[row].id else { return }
         try? store.setPinned(!filteredClips[row].pinned, id: id)
         refresh()
     }
 
     func deleteRow(at row: Int) {
-        guard row < filteredClips.count, let id = filteredClips[row].id else { return }
+        guard row >= 0, row < filteredClips.count, let id = filteredClips[row].id else { return }
         try? store.delete(id: id)
         refresh()
+    }
+
+    // Right-click context menu — the only way to reach togglePin/deleteRow from the UI.
+    private func buildContextMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.delegate = self
+        menu.addItem(withTitle: "Pin", action: #selector(togglePinFromMenu), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Delete", action: #selector(deleteFromMenu), keyEquivalent: "").target = self
+        return menu
+    }
+
+    @objc private func togglePinFromMenu() {
+        togglePin(at: tableView.clickedRow)
+    }
+
+    @objc private func deleteFromMenu() {
+        deleteRow(at: tableView.clickedRow)
     }
 
     // NSWindowDelegate
@@ -213,6 +231,20 @@ extension PopupWindowController: NSSearchFieldDelegate {
     }
 }
 
+extension PopupWindowController: NSMenuDelegate {
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        let row = tableView.clickedRow
+        let validRow = row >= 0 && row < filteredClips.count
+        let pinned = validRow && filteredClips[row].pinned
+        for item in menu.items {
+            item.isEnabled = validRow
+            if item.action == #selector(togglePinFromMenu) {
+                item.title = pinned ? "Unpin" : "Pin"
+            }
+        }
+    }
+}
+
 extension PopupWindowController: NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
         filteredClips.count
@@ -226,10 +258,11 @@ extension PopupWindowController: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func displayText(for clip: Clip) -> String {
+        let pinPrefix = clip.pinned ? "📌 " : ""
         switch clip.type {
-        case .text: return clip.textContent ?? ""
-        case .file: return "📄 " + (clip.filePath ?? "")
-        case .image: return "🖼 Image (\((clip.imageData?.count ?? 0) / 1024) KB)"
+        case .text: return pinPrefix + (clip.textContent ?? "")
+        case .file: return pinPrefix + "📄 " + (clip.filePath ?? "")
+        case .image: return pinPrefix + "🖼 Image (\((clip.imageData?.count ?? 0) / 1024) KB)"
         }
     }
 }
