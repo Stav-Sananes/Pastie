@@ -1,4 +1,8 @@
-import Foundation
+// Sources/Pastie/main.swift
+import AppKit
 
-// Placeholder main entry point for Pastie
-print("Pastie starting...")
+let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
+let delegate = AppDelegate()
+app.delegate = delegate
+app.run()
