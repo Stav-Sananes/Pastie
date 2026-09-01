@@ -33,6 +33,20 @@ final class ClipStore {
                 t.column("sortOrder", .integer).notNull().defaults(to: 0)
             }
         }
+        migrator.registerMigration("addSyncColumns") { db in
+            try db.alter(table: "clip") { t in
+                t.add(column: "uuid", .text)
+                t.add(column: "originDevice", .text)
+            }
+            let ids = try Int64.fetchAll(db, sql: "SELECT id FROM clip WHERE uuid IS NULL")
+            for id in ids {
+                try db.execute(
+                    sql: "UPDATE clip SET uuid = ? WHERE id = ?",
+                    arguments: [UUID().uuidString, id]
+                )
+            }
+            try db.create(index: "clip_on_uuid", on: "clip", columns: ["uuid"], unique: true)
+        }
         try migrator.migrate(dbQueue)
     }
 
@@ -93,6 +107,12 @@ final class ClipStore {
     func mostRecent() throws -> Clip? {
         try dbQueue.read { db in
             try Clip.order(Column("timestamp").desc).fetchOne(db)
+        }
+    }
+
+    func clipExists(uuid: String) throws -> Bool {
+        try dbQueue.read { db in
+            try Clip.filter(Column("uuid") == uuid).fetchCount(db) > 0
         }
     }
 }

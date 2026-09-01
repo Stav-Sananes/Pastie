@@ -9,6 +9,8 @@ enum ClipType: String, Codable {
 
 struct Clip: Identifiable, Equatable, Codable {
     var id: Int64?
+    /// Global identity, stable across machines. Basis for cross-peer dedup.
+    var uuid: String = UUID().uuidString
     var type: ClipType
     var textContent: String?
     var imageData: Data?
@@ -17,6 +19,9 @@ struct Clip: Identifiable, Equatable, Codable {
     var timestamp: Date
     var pinned: Bool
     var sortOrder: Int64
+    /// Device ID this clip arrived from; nil for locally-captured clips.
+    /// Non-nil is the loop-prevention guard: such clips are never re-broadcast.
+    var originDevice: String? = nil
 }
 
 extension Clip: FetchableRecord, MutablePersistableRecord {
