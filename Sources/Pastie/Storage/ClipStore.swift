@@ -3,12 +3,19 @@ import GRDB
 
 final class ClipStore {
     private let dbQueue: DatabaseQueue
-    private let retentionCount: Int
+    private let retentionCountProvider: () -> Int
 
-    init(dbQueue: DatabaseQueue, retentionCount: Int = 500) throws {
+    /// Designated initializer: reads the retention limit fresh on every eviction check via
+    /// the provider closure, so a live preference change takes effect immediately.
+    init(dbQueue: DatabaseQueue, retentionCountProvider: @escaping () -> Int) throws {
         self.dbQueue = dbQueue
-        self.retentionCount = retentionCount
+        self.retentionCountProvider = retentionCountProvider
         try Self.migrate(dbQueue)
+    }
+
+    /// Convenience initializer for callers (and tests) that just want a fixed retention count.
+    convenience init(dbQueue: DatabaseQueue, retentionCount: Int = 500) throws {
+        try self.init(dbQueue: dbQueue, retentionCountProvider: { retentionCount })
     }
 
     private static func migrate(_ dbQueue: DatabaseQueue) throws {
@@ -40,10 +47,11 @@ final class ClipStore {
     }
 
     private func evictIfNeeded() throws {
+        let retentionCount = retentionCountProvider()
         try dbQueue.write { db in
             let count = try Clip.filter(Column("pinned") == false).fetchCount(db)
-            guard count > self.retentionCount else { return }
-            let excess = count - self.retentionCount
+            guard count > retentionCount else { return }
+            let excess = count - retentionCount
             let toDelete = try Clip
                 .filter(Column("pinned") == false)
                 .order(Column("timestamp").asc)

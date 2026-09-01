@@ -18,7 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let dbQueue: DatabaseQueue
         do {
             dbQueue = try DatabaseQueue(path: Self.databasePath())
-            clipStore = try ClipStore(dbQueue: dbQueue, retentionCount: preferences.retentionCount)
+            clipStore = try ClipStore(dbQueue: dbQueue, retentionCountProvider: { [weak preferences] in
+                preferences?.retentionCount ?? 500
+            })
         } catch {
             NSLog("Pastie: fatal storage init error: \(error)")
             NSApp.terminate(nil)

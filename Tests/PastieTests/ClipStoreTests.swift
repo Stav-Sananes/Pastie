@@ -66,6 +66,25 @@ extension ClipStoreTests {
         XCTAssertTrue(all.contains { $0.textContent == "keep" })
     }
 
+    func testRetentionCountProviderIsReadLiveOnEachEviction() throws {
+        var liveRetentionCount = 10
+        let dbQueue = try DatabaseQueue()
+        let store = try ClipStore(dbQueue: dbQueue, retentionCountProvider: { liveRetentionCount })
+
+        for i in 0..<3 {
+            _ = try store.insert(Clip(id: nil, type: .text, textContent: "clip\(i)", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(Double(i)), pinned: false, sortOrder: 0))
+        }
+        XCTAssertEqual(try store.fetchAll().count, 3, "with a high retention count nothing should be evicted yet")
+
+        // Simulate the user lowering the retention preference at runtime — no ClipStore recreation.
+        liveRetentionCount = 1
+        _ = try store.insert(Clip(id: nil, type: .text, textContent: "clip3", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(3), pinned: false, sortOrder: 0))
+
+        let all = try store.fetchAll()
+        XCTAssertEqual(all.count, 1, "the new lower retention count should be honored immediately, without recreating ClipStore")
+        XCTAssertEqual(all.first?.textContent, "clip3")
+    }
+
     func testDeleteRemovesItem() throws {
         let store = try makeStore()
         let clip = try store.insert(Clip(id: nil, type: .text, textContent: "gone", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
