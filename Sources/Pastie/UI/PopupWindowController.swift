@@ -13,6 +13,9 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     /// The app that was frontmost right before Pastie activated itself, so pasteSelection()
     /// can hand focus back to it before simulating ⌘V.
     private var previousApp: NSRunningApplication?
+    /// Local key-down monitor active while the panel is visible, so Return/Escape work
+    /// regardless of which control (search field or table view) currently has focus.
+    private var keyMonitor: Any?
 
     init(store: ClipStore, pasteEngine: PasteEngine) {
         self.store = store
@@ -73,10 +76,41 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(searchField)
         NSApp.activate(ignoringOtherApps: true)
+        installKeyMonitor()
     }
 
     func hide() {
         panel.orderOut(nil)
+        removeKeyMonitor()
+    }
+
+    /// Enter/Esc need to work no matter which control has focus — doCommandBy: on the search
+    /// field's delegate only fires while focus is IN the search field, but clicking a row (the
+    /// only way to ⌘/⇧-click multi-select) moves first responder to the table view. A local
+    /// event monitor catches Return/Escape regardless of first responder, without disturbing
+    /// the existing doCommandBy: arrow-key/Return/Escape forwarding used while typing.
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            switch event.keyCode {
+            case 36: // Return
+                self.pasteSelection()
+                return nil
+            case 53: // Escape
+                self.hide()
+                return nil
+            default:
+                return event
+            }
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+        }
+        keyMonitor = nil
     }
 
     private func refresh() {
