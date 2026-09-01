@@ -35,7 +35,45 @@ final class ClipStore {
         try dbQueue.write { db in
             try clip.insert(db)
         }
+        try evictIfNeeded()
         return clip
+    }
+
+    private func evictIfNeeded() throws {
+        try dbQueue.write { db in
+            let count = try Clip.filter(Column("pinned") == false).fetchCount(db)
+            guard count > self.retentionCount else { return }
+            let excess = count - self.retentionCount
+            let toDelete = try Clip
+                .filter(Column("pinned") == false)
+                .order(Column("timestamp").asc)
+                .limit(excess)
+                .fetchAll(db)
+            for clip in toDelete {
+                try clip.delete(db)
+            }
+        }
+    }
+
+    func setPinned(_ pinned: Bool, id: Int64) throws {
+        try dbQueue.write { db in
+            if var clip = try Clip.fetchOne(db, key: id) {
+                clip.pinned = pinned
+                try clip.update(db)
+            }
+        }
+    }
+
+    func delete(id: Int64) throws {
+        try dbQueue.write { db in
+            _ = try Clip.deleteOne(db, key: id)
+        }
+    }
+
+    func clearAll() throws {
+        try dbQueue.write { db in
+            _ = try Clip.filter(Column("pinned") == false).deleteAll(db)
+        }
     }
 
     func fetchAll() throws -> [Clip] {

@@ -42,3 +42,47 @@ final class ClipStoreTests: XCTestCase {
         XCTAssertEqual(try store.mostRecent()?.textContent, "new")
     }
 }
+
+extension ClipStoreTests {
+    func testRetentionEvictsOldestUnpinned() throws {
+        let store = try makeStore(retentionCount: 2)
+        for i in 0..<3 {
+            let clip = Clip(id: nil, type: .text, textContent: "clip\(i)", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(Double(i)), pinned: false, sortOrder: 0)
+            _ = try store.insert(clip)
+        }
+        let all = try store.fetchAll()
+        XCTAssertEqual(all.count, 2)
+        XCTAssertFalse(all.contains { $0.textContent == "clip0" })
+    }
+
+    func testPinnedItemsExemptFromEviction() throws {
+        let store = try makeStore(retentionCount: 1)
+        let pinned = try store.insert(Clip(id: nil, type: .text, textContent: "keep", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(-100), pinned: false, sortOrder: 0))
+        try store.setPinned(true, id: pinned.id!)
+        _ = try store.insert(Clip(id: nil, type: .text, textContent: "newer1", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+        _ = try store.insert(Clip(id: nil, type: .text, textContent: "newer2", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(1), pinned: false, sortOrder: 0))
+
+        let all = try store.fetchAll()
+        XCTAssertTrue(all.contains { $0.textContent == "keep" })
+    }
+
+    func testDeleteRemovesItem() throws {
+        let store = try makeStore()
+        let clip = try store.insert(Clip(id: nil, type: .text, textContent: "gone", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+        try store.delete(id: clip.id!)
+        XCTAssertTrue(try store.fetchAll().isEmpty)
+    }
+
+    func testClearAllKeepsPinned() throws {
+        let store = try makeStore()
+        let pinned = try store.insert(Clip(id: nil, type: .text, textContent: "pinned", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+        try store.setPinned(true, id: pinned.id!)
+        _ = try store.insert(Clip(id: nil, type: .text, textContent: "unpinned", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+
+        try store.clearAll()
+
+        let all = try store.fetchAll()
+        XCTAssertEqual(all.count, 1)
+        XCTAssertEqual(all.first?.textContent, "pinned")
+    }
+}
