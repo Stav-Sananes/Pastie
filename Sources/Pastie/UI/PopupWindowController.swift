@@ -16,6 +16,9 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     /// Local key-down monitor active while the panel is visible, so Return/Escape work
     /// regardless of which control (search field or table view) currently has focus.
     private var keyMonitor: Any?
+    /// Told to ignore the pasteboard change caused by our own paste-as-list writes, so
+    /// ClipboardMonitor.tick() doesn't re-capture what we just pasted as a brand-new clip.
+    weak var clipboardMonitor: ClipboardMonitor?
 
     init(store: ClipStore, pasteEngine: PasteEngine) {
         self.store = store
@@ -150,7 +153,9 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         previousApp?.activate(options: [])
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self else { return }
-            let pasted = self.pasteEngine.paste(selection)
+            let pasted = self.pasteEngine.paste(selection, beforeEachWrite: { [weak self] in
+                self?.clipboardMonitor?.ignoreNextChange()
+            })
             if !pasted {
                 self.showAccessibilityFallbackAlert()
             }

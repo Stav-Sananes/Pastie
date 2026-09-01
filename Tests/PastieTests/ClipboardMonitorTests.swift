@@ -33,4 +33,29 @@ final class ClipboardMonitorTests: XCTestCase {
 
         XCTAssertEqual(try store.fetchAll().count, 1)
     }
+
+    func testIgnoreNextChangeSkipsSelfWriteButResumesCapturingAfter() throws {
+        let (monitor, store) = try makeMonitor()
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("baseline \(UUID())", forType: .string)
+        monitor.tick()
+        XCTAssertEqual(try store.fetchAll().count, 1, "baseline copy should be captured normally")
+
+        // Simulate PasteEngine writing the just-pasted clip back to the pasteboard —
+        // PopupWindowController calls ignoreNextChange() right before this write happens.
+        monitor.ignoreNextChange()
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("self-pasted content \(UUID())", forType: .string)
+        monitor.tick()
+
+        XCTAssertEqual(try store.fetchAll().count, 1, "the self-write triggered by our own paste should NOT be captured as a new clip")
+
+        // A subsequent genuine external copy should still be captured normally —
+        // ignoreNextChange() only suppresses the one change immediately following it.
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("external copy \(UUID())", forType: .string)
+        monitor.tick()
+
+        XCTAssertEqual(try store.fetchAll().count, 2, "external changes after the ignored one should resume being captured")
+    }
 }

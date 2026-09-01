@@ -9,14 +9,20 @@ final class PasteEngine {
     /// Writes each clip to the pasteboard and simulates ⌘V, in order (paste-as-list).
     /// Returns false without pasting if Accessibility permission isn't granted —
     /// caller should fall back to "copied to clipboard, paste manually".
+    ///
+    /// `beforeEachWrite` is invoked immediately before each pasteboard write (once per clip) so
+    /// a caller holding a ClipboardMonitor can tell it to ignore the resulting pasteboard change
+    /// (see ClipboardMonitor.ignoreNextChange) and avoid re-capturing our own paste as a new clip.
     @discardableResult
-    func paste(_ clips: [Clip]) -> Bool {
+    func paste(_ clips: [Clip], beforeEachWrite: (() -> Void)? = nil) -> Bool {
         guard let first = clips.first else { return true }
+        beforeEachWrite?()
         writeToPasteboard(first)
         guard AXIsProcessTrusted() else { return false }
         simulatePasteKeystroke()
         Thread.sleep(forTimeInterval: 0.05)
         for clip in clips.dropFirst() {
+            beforeEachWrite?()
             writeToPasteboard(clip)
             simulatePasteKeystroke()
             Thread.sleep(forTimeInterval: 0.05)

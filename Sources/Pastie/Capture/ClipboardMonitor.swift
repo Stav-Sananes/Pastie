@@ -9,6 +9,10 @@ final class ClipboardMonitor {
     private var lastChangeCount: Int
     private var timer: Timer?
     private let pollInterval: TimeInterval
+    /// Set by ignoreNextChange() right before Pastie writes to the pasteboard itself
+    /// (e.g. during paste). The next tick() that observes a changed pasteboard is
+    /// treated as our own write rather than a new external copy, so it isn't captured.
+    private var ignoringSelfWrite = false
 
     init(store: ClipStore, preferences: PreferencesStore, pollInterval: TimeInterval = 0.5) {
         self.store = store
@@ -28,10 +32,21 @@ final class ClipboardMonitor {
         timer = nil
     }
 
+    /// Call right before Pastie writes a clip to the pasteboard (e.g. from PasteEngine) so the
+    /// resulting pasteboard change is not re-captured as a brand-new clip on the next tick().
+    func ignoreNextChange() {
+        ignoringSelfWrite = true
+    }
+
     func tick() {
         let pasteboard = NSPasteboard.general
         guard pasteboard.changeCount != lastChangeCount else { return }
         lastChangeCount = pasteboard.changeCount
+
+        if ignoringSelfWrite {
+            ignoringSelfWrite = false
+            return
+        }
 
         let types = Set((pasteboard.types ?? []).map { $0.rawValue })
         let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier

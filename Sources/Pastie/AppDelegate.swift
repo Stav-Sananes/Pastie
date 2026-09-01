@@ -37,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         monitor = ClipboardMonitor(store: clipStore, preferences: preferences)
         monitor.start()
+        popupController.clipboardMonitor = monitor
 
         hotkeyManager = HotkeyManager(preferences: preferences) { [weak self] in
             self?.popupController.toggle()
