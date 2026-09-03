@@ -58,4 +58,43 @@ final class ClipboardMonitorTests: XCTestCase {
 
         XCTAssertEqual(try store.fetchAll().count, 2, "external changes after the ignored one should resume being captured")
     }
+
+    func testTickSkipsImageWhenCaptureImagesDisabled() throws {
+        let store = try ClipStore(dbQueue: try DatabaseQueue(), retentionCount: 500)
+        let prefs = PreferencesStore(defaults: UserDefaults(suiteName: "pastie-monitor-tests-\(UUID())")!)
+        prefs.captureImages = false
+        let monitor = ClipboardMonitor(store: store, preferences: prefs)
+
+        NSPasteboard.general.clearContents()
+        let image = NSImage(size: NSSize(width: 4, height: 4))
+        image.lockFocus()
+        NSColor.red.set()
+        NSRect(x: 0, y: 0, width: 4, height: 4).fill()
+        image.unlockFocus()
+        NSPasteboard.general.writeObjects([image])
+
+        monitor.tick()
+
+        XCTAssertEqual(try store.fetchAll().count, 0)
+    }
+
+    func testTickCapturesImageWhenCaptureImagesEnabled() throws {
+        let store = try ClipStore(dbQueue: try DatabaseQueue(), retentionCount: 500)
+        let prefs = PreferencesStore(defaults: UserDefaults(suiteName: "pastie-monitor-tests-\(UUID())")!)
+        let monitor = ClipboardMonitor(store: store, preferences: prefs)
+
+        NSPasteboard.general.clearContents()
+        let image = NSImage(size: NSSize(width: 4, height: 4))
+        image.lockFocus()
+        NSColor.blue.set()
+        NSRect(x: 0, y: 0, width: 4, height: 4).fill()
+        image.unlockFocus()
+        NSPasteboard.general.writeObjects([image])
+
+        monitor.tick()
+
+        let all = try store.fetchAll()
+        XCTAssertEqual(all.count, 1)
+        XCTAssertEqual(all.first?.type, .image)
+    }
 }
