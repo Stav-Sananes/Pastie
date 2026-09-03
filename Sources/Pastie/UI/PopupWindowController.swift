@@ -55,6 +55,7 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         searchField.target = self
         searchField.action = #selector(searchChanged)
         searchField.delegate = self
+        searchField.autoresizingMask = [.width, .minYMargin]
 
         tableView = NSTableView(frame: .zero)
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("clip"))
@@ -71,6 +72,7 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         scrollView = NSScrollView(frame: NSRect(x: 8, y: 8, width: 404, height: 304))
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
+        scrollView.autoresizingMask = [.width, .height]
 
         panel.contentView?.addSubview(searchField)
         panel.contentView?.addSubview(scrollView)
