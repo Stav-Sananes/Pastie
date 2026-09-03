@@ -27,11 +27,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        popupController = PopupWindowController(store: clipStore, pasteEngine: PasteEngine())
+        popupController = PopupWindowController(store: clipStore, pasteEngine: PasteEngine(), preferences: preferences)
 
         menuBarController = MenuBarController(
             popupController: popupController,
             clipStore: clipStore,
+            preferences: preferences,
             onOpenPreferences: { [weak self] in self?.openPreferences() }
         )
 
@@ -49,7 +50,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openPreferences() {
         if preferencesWindow == nil {
-            let viewModel = PreferencesViewModel(store: preferences)
+            let viewModel = PreferencesViewModel(store: preferences, onHotkeyChanged: { [weak self] in
+                self?.hotkeyManager.unregister()
+                self?.hotkeyManager.registerFromPreferences()
+            })
             let hosting = NSHostingController(rootView: PreferencesView(viewModel: viewModel))
             let window = NSWindow(contentViewController: hosting)
             window.title = "Pastie Preferences"

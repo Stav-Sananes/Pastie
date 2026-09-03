@@ -2,8 +2,6 @@ import AppKit
 import Foundation
 
 final class ClipboardMonitor {
-    static let imageDownsampleThresholdBytes = 5 * 1024 * 1024
-
     private let store: ClipStore
     private let preferences: PreferencesStore
     private var lastChangeCount: Int
@@ -57,6 +55,13 @@ final class ClipboardMonitor {
 
         guard let clip = makeClip(from: pasteboard, sourceApp: bundleID) else { return }
 
+        guard CaptureFilter.isTypeEnabled(
+            clip.type,
+            captureText: preferences.captureText,
+            captureImages: preferences.captureImages,
+            captureFiles: preferences.captureFiles
+        ) else { return }
+
         if let last = try? store.mostRecent(), last.hasSameContent(as: clip) {
             return
         }
@@ -85,7 +90,8 @@ final class ClipboardMonitor {
     }
 
     private func downsampleIfNeeded(_ data: Data) -> Data {
-        guard data.count > Self.imageDownsampleThresholdBytes,
+        let thresholdBytes = preferences.maxImageSizeMB * 1024 * 1024
+        guard data.count > thresholdBytes,
               let image = NSImage(data: data), image.size.width > 0 else { return data }
         let targetWidth: CGFloat = 400
         let targetSize = NSSize(width: targetWidth, height: targetWidth * (image.size.height / image.size.width))

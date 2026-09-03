@@ -2,8 +2,18 @@
 import AppKit
 
 final class PopupWindowController: NSObject, NSWindowDelegate {
+    /// Non-list chrome (search field + margins) in buildPanel()'s base layout — total
+    /// panel height minus the space given to the row list.
+    static let chromeHeight: CGFloat = 56
+    static let rowHeight: CGFloat = 24
+
+    static func panelHeight(forRows rows: Int) -> CGFloat {
+        chromeHeight + CGFloat(max(1, rows)) * rowHeight
+    }
+
     private let store: ClipStore
     private let pasteEngine: PasteEngine
+    private let preferences: PreferencesStore
     private var panel: NSPanel!
     private var searchField: NSSearchField!
     private var tableView: NSTableView!
@@ -20,9 +30,10 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     /// ClipboardMonitor.tick() doesn't re-capture what we just pasted as a brand-new clip.
     weak var clipboardMonitor: ClipboardMonitor?
 
-    init(store: ClipStore, pasteEngine: PasteEngine) {
+    init(store: ClipStore, pasteEngine: PasteEngine, preferences: PreferencesStore) {
         self.store = store
         self.pasteEngine = pasteEngine
+        self.preferences = preferences
         super.init()
         buildPanel()
     }
@@ -44,6 +55,7 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         searchField.target = self
         searchField.action = #selector(searchChanged)
         searchField.delegate = self
+        searchField.autoresizingMask = [.width, .minYMargin]
 
         tableView = NSTableView(frame: .zero)
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("clip"))
@@ -60,6 +72,7 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         scrollView = NSScrollView(frame: NSRect(x: 8, y: 8, width: 404, height: 304))
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
+        scrollView.autoresizingMask = [.width, .height]
 
         panel.contentView?.addSubview(searchField)
         panel.contentView?.addSubview(scrollView)
@@ -76,6 +89,7 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     func show() {
         previousApp = NSWorkspace.shared.frontmostApplication
         refresh()
+        panel.setContentSize(NSSize(width: panel.frame.width, height: Self.panelHeight(forRows: preferences.popupRowCount)))
         panel.center()
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(searchField)
@@ -86,6 +100,13 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     func hide() {
         panel.orderOut(nil)
         removeKeyMonitor()
+    }
+
+    /// The panel's actual content-view height. Exposed (internal, not private) so tests
+    /// can verify `show()` sizes the panel via content size rather than window-frame size —
+    /// see PopupWindowControllerTests.testShowSetsContentHeightToPanelHeightForConfiguredRowCount.
+    var currentContentHeightForTesting: CGFloat? {
+        panel.contentView?.frame.height
     }
 
     /// Enter/Esc need to work no matter which control has focus — doCommandBy: on the search
