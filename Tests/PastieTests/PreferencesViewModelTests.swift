@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import Pastie
 
@@ -38,5 +39,26 @@ final class PreferencesViewModelTests: XCTestCase {
         vm.removeExcluded(at: IndexSet(integer: 0))
 
         XCTAssertTrue(vm.excludedBundleIDs.isEmpty)
+    }
+
+    func testCaptureTogglesDefaultToTrueAndRoundTrip() {
+        let vm = makeViewModel()
+        XCTAssertTrue(vm.captureText)
+        XCTAssertTrue(vm.captureImages)
+        XCTAssertTrue(vm.captureFiles)
+        vm.captureImages = false
+        XCTAssertFalse(vm.captureImages)
+    }
+
+    func testUpdateHotkeyUpdatesDisplayAndFiresCallback() {
+        var changed = false
+        let store = PreferencesStore(defaults: UserDefaults(suiteName: "pastie-vm-hotkey-tests-\(UUID())")!)
+        let vm = PreferencesViewModel(store: store, onHotkeyChanged: { changed = true })
+
+        vm.updateHotkey(keyCode: 1, modifiers: UInt32(NSEvent.ModifierFlags([.control, .shift]).rawValue))
+
+        XCTAssertEqual(vm.hotkeyDisplay, "⌃⇧S")
+        XCTAssertTrue(changed)
+        XCTAssertEqual(store.hotkeyKeyCode, 1)
     }
 }
