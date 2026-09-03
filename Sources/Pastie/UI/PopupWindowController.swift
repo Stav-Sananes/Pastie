@@ -58,6 +58,7 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         searchField.autoresizingMask = [.width, .minYMargin]
 
         tableView = NSTableView(frame: .zero)
+        tableView.rowHeight = Self.rowHeight
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("clip"))
         column.width = 400
         tableView.addTableColumn(column)
@@ -107,6 +108,12 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     /// see PopupWindowControllerTests.testShowSetsContentHeightToPanelHeightForConfiguredRowCount.
     var currentContentHeightForTesting: CGFloat? {
         panel.contentView?.frame.height
+    }
+
+    /// The table view's actual configured row height — exposed so tests can verify it
+    /// matches `Self.rowHeight`, the per-row height `panelHeight(forRows:)` assumes.
+    var tableRowHeightForTesting: CGFloat {
+        tableView.rowHeight
     }
 
     /// Enter/Esc need to work no matter which control has focus — doCommandBy: on the search
