@@ -1,0 +1,308 @@
+# Pastie
+
+A clipboard manager for macOS. It lives in the menu bar, remembers what you copy, and gives it
+back to you with a keystroke.
+
+macOS keeps exactly one thing on the clipboard. Copy something else and the previous thing is
+gone. Pastie keeps a history of what you copied, lets you search it, and pastes any entry
+straight into whatever app you are using.
+
+**Status:** working, unreleased, version 0.1.0. Built for macOS 13 and later. 49 tests pass.
+
+---
+
+## Contents
+
+- [For users](#for-users) — install it, use it, and what it can see
+- [For developers](#for-developers) — build, test, and the shape of the code
+- [Design notes](#design-notes) — why the odd parts are the way they are
+- [Project status](#project-status) — what exists and what is only planned
+
+---
+
+# For users
+
+## What it does
+
+- **Remembers your clipboard.** Text, images, and files you copy are kept in a local history,
+  newest first. The default is the last 500 items.
+- **Summons with a hotkey.** Press **⌥⌘V** (remappable) and a small search panel appears over
+  whatever you were doing.
+- **Searches as you type.** Filter the history, pick an entry with the arrow keys, press ↵, and
+  it is pasted into the app you were in.
+- **Pastes several at once.** Select multiple entries and they are pasted one after another.
+- **Pins what matters.** A pinned entry is never dropped when the history fills up.
+- **Skips what it shouldn't see.** Password managers mark their copies as concealed, and Pastie
+  honours that. You can also name apps it should ignore entirely.
+- **Stays out of the way.** No Dock icon, no window, just a menu-bar icon.
+
+## Installing
+
+There is no published release yet. When one is tagged, it will be a `Pastie.app.zip` attached to
+a [GitHub release](https://github.com/Stav-Sananes/Pastie/releases). Until then, build it
+yourself — see [For developers](#for-developers).
+
+### The Gatekeeper warning, and why you will get one
+
+Pastie is not signed with an Apple Developer ID, because that requires a paid Apple Developer
+Program membership this project does not have yet. macOS will therefore refuse to open a
+downloaded copy the first time, saying it "is damaged" or "cannot be opened because Apple cannot
+check it for malicious software".
+
+On macOS 15 and later — including macOS 26 — the old trick of Control-clicking the app and
+choosing Open **no longer works**. The current path is:
+
+1. Double-click `Pastie.app`. macOS refuses and shows the warning. Dismiss it.
+2. Open **System Settings → Privacy & Security**.
+3. Scroll to the Security section. There is a line saying `"Pastie" was blocked`, with an
+   **Open Anyway** button. Click it.
+4. Confirm, and authenticate.
+
+You should be suspicious of this. An unsigned app that asks for permission to watch your
+clipboard and press keys for you is exactly the shape of something malicious, and the warning
+exists for good reasons. If you did not build this yourself from source you have no way to know
+what is inside it. Building it yourself takes about a minute and avoids the whole problem — a
+locally built app is not quarantined.
+
+### Accessibility permission
+
+Pastie pastes by pressing ⌘V for you in whatever app is frontmost. macOS only allows an app to
+send keystrokes to other apps if you grant it Accessibility permission, so on first use it will
+ask.
+
+**System Settings → Privacy & Security → Accessibility →** turn Pastie on.
+
+Without it, everything still works except the final keystroke: Pastie puts the entry on your
+clipboard and tells you to press ⌘V yourself.
+
+## Using it
+
+| Action | How |
+| --- | --- |
+| Open the panel | **⌥⌘V**, or click the menu-bar icon → Open Pastie |
+| Search | Just type — the panel opens with the search field focused |
+| Move through results | **↑** / **↓** |
+| Paste the selected entry | **↵** |
+| Select several | **⌘-click** or **⇧-click** rows, then **↵** to paste them in order |
+| Pin, or delete, an entry | **Right-click** the row |
+| Close the panel | **Esc**, or click away |
+| Preferences | Menu-bar icon → Preferences…, or **⌘,** |
+| Empty the history | Menu-bar icon → Clear History |
+
+Preferences has four tabs:
+
+- **General** — how many entries to keep, launch at login
+- **Hotkey** — record a new hotkey by pressing the combination you want
+- **Capture** — turn text, image, or file capture on and off individually; set the maximum image
+  size; manage the list of apps to ignore
+- **Appearance** — how many rows the panel shows
+
+## What Pastie can see, and where it puts it
+
+A clipboard manager sees everything you copy. That includes passwords, tokens, and private
+messages. Being precise about this matters more than reassuring you about it.
+
+**What it reads.** Every change to the system clipboard, checked twice a second, along with the
+bundle identifier of the app that was frontmost when the change happened.
+
+**What it does not read.** A copy that the source app marks as concealed or transient — the
+convention password managers are expected to use (`org.nspasteboard.ConcealedType`,
+`org.nspasteboard.TransientType`) — is skipped and never stored. Whether any particular app
+actually sets that marker is up to that app, so treat it as a courtesy that usually holds rather
+than a guarantee: if a password manager you rely on does not set it, add it to the excluded list
+instead. Apps on that list are skipped entirely while they are frontmost. Capture types you turn off are never stored.
+
+**Where it goes.** A SQLite database at:
+
+```
+~/Library/Application Support/Pastie/pastie.sqlite
+```
+
+**It is not encrypted.** Anything running as your user account can read that file, and so can
+anyone with your unlocked Mac. This is a deliberate trade for a local single-user tool, but you
+should know it. If you copy a password from an app that does not mark it concealed, that
+password is sitting in that file in plain text until it is evicted.
+
+**What leaves your machine: nothing.** There is no server, no account, no analytics, no crash
+reporting, no network code of any kind in the app. There is nothing to opt out of.
+
+**Clear History keeps your pinned entries.** It deletes unpinned history only. To remove
+everything, unpin first, or delete the database file above and restart.
+
+---
+
+# For developers
+
+## Requirements
+
+- macOS 13 or later
+- Swift 5.9 or later (Xcode 15+, or the standalone toolchain)
+
+## Build and run
+
+```bash
+git clone https://github.com/Stav-Sananes/Pastie.git
+cd Pastie
+swift build              # compile
+swift test               # run the suite — 49 tests
+./Scripts/build-app.sh   # produce build/Pastie.app
+open build/Pastie.app
+```
+
+`Scripts/build-app.sh` does a release build, then assembles a bundle by hand: the binary into
+`Contents/MacOS/`, `Resources/Info.plist` into `Contents/`. There is no Xcode project — this is
+a SwiftPM package, and the bundle is three copy commands rather than a build system.
+
+The app is a menu-bar agent (`LSUIElement` is true in `Info.plist`), so it has no Dock icon and
+no main window. Quit it from the menu-bar icon.
+
+## Dependencies
+
+Two, both small:
+
+- [GRDB](https://github.com/groue/GRDB.swift) — SQLite with a typed record layer and a migration
+  system
+- [HotKey](https://github.com/soffes/HotKey) — a thin wrapper over Carbon's
+  `RegisterEventHotKey`, which is still the only way to get a global hotkey on macOS
+
+## Layout
+
+```
+Sources/Pastie/
+  main.swift                  Entry point: installs AppDelegate, runs the app
+  AppDelegate.swift           Wires every component together at launch
+  Models/Clip.swift           The Clip record and its content-equality rule
+  Storage/ClipStore.swift     SQLite: migrations, insert, eviction, pin, delete
+  Capture/
+    ClipboardMonitor.swift    The polling loop; turns a pasteboard into a Clip
+    CaptureFilter.swift       Pure rules for what may be captured
+  Search/ClipSearch.swift     Pure substring filtering over clips
+  Paste/PasteEngine.swift     Writes the pasteboard and synthesises ⌘V
+  Hotkey/
+    HotkeyManager.swift       Registers the global hotkey from preferences
+    HotkeyCapture.swift       Turns a key event into a storable binding
+    HotkeyFormatter.swift     Renders a binding as "⌥⌘V"
+  UI/
+    MenuBarController.swift   The status item and its menu
+    PopupWindowController.swift  The search panel: list, keys, paste
+    PreferencesView.swift     Tab container
+    SettingsTabs/             General, Hotkey, Capture, Appearance
+    HotkeyRecorderView.swift  "Press a key combination" control
+    PreferencesViewModel.swift
+  Preferences/PreferencesStore.swift   UserDefaults-backed settings
+  Support/LaunchAtLogin.swift          SMAppService wrapper
+```
+
+The split is deliberate: **anything with a rule in it is a pure function in its own type**, and
+the AppKit classes are wiring. `CaptureFilter` decides what may be captured but touches no
+pasteboard; `ClipSearch` filters an array; `HotkeyFormatter` formats. That is why 49 tests can
+cover the logic of an app whose interface is untestable — the untestable parts contain no
+decisions.
+
+## Testing
+
+```bash
+swift test                                  # everything
+swift test --filter ClipStoreTests          # one suite
+```
+
+What is covered: storage (insert, eviction, the pin exemption, clearing), capture rules
+(concealed and transient types, excluded apps, per-type toggles), search, hotkey capture and
+formatting, preferences defaults and round-trips, and panel sizing.
+
+What is not, and cannot easily be: global hotkey registration, synthetic ⌘V into another app,
+and the panel's event handling. These need a real user session and a real frontmost app. They
+are verified by hand. If you change them, launch the app and check them yourself — a green
+suite says nothing about whether paste still works.
+
+---
+
+# Design notes
+
+The parts of this codebase that look wrong usually are not. Each of these cost a bug to learn.
+
+### Why it polls the clipboard twice a second
+
+macOS has no notification for "the clipboard changed". None. The only mechanism is
+`NSPasteboard.general.changeCount`, an integer that increments on every write, which you have to
+read and compare yourself. So `ClipboardMonitor` runs a timer at 0.5s and compares. Every macOS
+clipboard manager does this; there is no better way, only different intervals.
+
+### Why pasting has a 0.1-second delay in it
+
+To paste, Pastie has to be frontmost (its panel has keyboard focus), then *not* be frontmost (so
+the synthetic ⌘V lands in your app, not in the panel). `pasteSelection` therefore hides the
+panel, calls `activate` on the app that was frontmost when the panel opened, and waits 0.1s
+before posting the keystroke. Without the wait, the keystroke arrives before the window server
+has finished moving focus, and it goes to the wrong place — or nowhere.
+
+The `previousApp` reference exists for the same reason: by the time you press ↵, the frontmost
+app *is* Pastie, so it has to have remembered who was in front before it appeared.
+
+### Why the monitor has an `ignoringSelfWrite` flag
+
+Pasting means writing to the clipboard. Writing to the clipboard bumps `changeCount`. The
+monitor sees a change and captures it — so every paste would append a duplicate of itself to the
+history, forever. `PasteEngine` takes a `beforeEachWrite` closure, the popup uses it to call
+`monitor.ignoreNextChange()`, and the next observed change is swallowed instead of stored.
+
+### Why there is a local key monitor as well as a delegate
+
+The search field's `doCommandBy:` delegate handles ↑/↓/↵/Esc — but only while the search field
+has focus. Clicking a row to multi-select moves first responder to the table view, and then ↵ did
+nothing. A local `NSEvent` monitor catches Return and Escape regardless of who has focus. Both
+mechanisms are live at once; that is intentional, not leftover.
+
+### Why the app is not sandboxed, and never will be
+
+The App Sandbox forbids posting synthetic events into other processes and restricts reading which
+app is frontmost. Those are the two things Pastie is made of. A sandboxed build could not paste
+and could not honour the excluded-app list, which is why distribution is direct download rather
+than the Mac App Store.
+
+### Why images get downsampled
+
+A screenshot on a Retina display can be tens of megabytes, and 500 of those is a database nobody
+wants. Above the configured limit (5MB by default), the image is redrawn at 400 points wide and
+only the thumbnail is stored. The original is not kept — pasting such an entry gives you the
+thumbnail. This is a real limitation, not a display optimisation.
+
+### Why deduplication only checks the most recent entry
+
+`ClipboardMonitor` compares a new clip against `store.mostRecent()`, not the whole history. Copy
+A, then B, then A again, and you get two A entries. This is on purpose: copying the same thing
+twice at different times is two events, and collapsing them would reorder your history in ways
+that surprise you. Copying the same thing twice *in a row* is usually a double ⌘C, which is why
+that one case is filtered.
+
+### Why retention counts unpinned entries only
+
+The cap is a limit on the stream, not on the library. Pinned entries are excluded from both the
+count and the eviction query, so pinning 600 items with a cap of 500 keeps all 600 — the cap
+governs what flows through, and pinning is how you take something out of the flow.
+
+---
+
+# Project status
+
+| Track | State | Where |
+| --- | --- | --- |
+| Core clipboard manager (v1) | **Shipped** — capture, popup, search, paste, pin, retention, excluded apps, launch at login | This repo |
+| Menu bar + Settings redesign | **Shipped** — four Settings tabs, hotkey remapping UI, per-type capture toggles, row count | This repo |
+| Saved clips, quick-paste slots, transforms, release polish (v3) | **Planned** — spec and task-level plan written, not started | Local docs, not in this repo |
+| Multi-machine LAN sync (v2) | **Planned** — spec and task-level plan written, not started | Local docs, not in this repo |
+
+The design documents for the two planned tracks are deliberately kept out of version control, so
+what you can clone is the software that exists rather than a description of software that does
+not. Nothing above is a promise; it is a record of what has been thought through.
+
+## Distribution
+
+Currently source-only. A signed and notarised build needs a paid Apple Developer Program
+membership, which would also unlock in-app updates. Until then, an unsigned release zip is
+possible but puts every downloader through the Gatekeeper detour described above, so building
+from source is the recommended path.
+
+## Licence
+
+None yet — all rights reserved by default. If you want to reuse any of this, ask.
