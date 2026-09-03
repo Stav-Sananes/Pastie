@@ -1,5 +1,6 @@
 // Sources/Pastie/UI/HotkeyRecorderView.swift
 import AppKit
+import HotKey
 import SwiftUI
 
 /// Captures the next key-down as a global hotkey binding. Click to start recording;
@@ -53,10 +54,16 @@ final class HotkeyRecorderNSView: NSView {
             label.stringValue = displayText
             return
         }
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        guard HotkeyCapture.isValidBinding(modifiers: modifiers) else { return }
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        guard HotkeyCapture.isValidBinding(modifiers: modifiers), Key(carbonKeyCode: UInt32(event.keyCode)) != nil else { return }
         isRecording = false
         onCapture?(UInt32(event.keyCode), UInt32(modifiers.rawValue))
+    }
+
+    override func resignFirstResponder() -> Bool {
+        isRecording = false
+        label.stringValue = displayText
+        return super.resignFirstResponder()
     }
 
     override func updateLayer() {

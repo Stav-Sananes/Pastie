@@ -89,9 +89,7 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     func show() {
         previousApp = NSWorkspace.shared.frontmostApplication
         refresh()
-        var frame = panel.frame
-        frame.size.height = Self.panelHeight(forRows: preferences.popupRowCount)
-        panel.setFrame(frame, display: false)
+        panel.setContentSize(NSSize(width: panel.frame.width, height: Self.panelHeight(forRows: preferences.popupRowCount)))
         panel.center()
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(searchField)
@@ -102,6 +100,13 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     func hide() {
         panel.orderOut(nil)
         removeKeyMonitor()
+    }
+
+    /// The panel's actual content-view height. Exposed (internal, not private) so tests
+    /// can verify `show()` sizes the panel via content size rather than window-frame size —
+    /// see PopupWindowControllerTests.testShowSetsContentHeightToPanelHeightForConfiguredRowCount.
+    var currentContentHeightForTesting: CGFloat? {
+        panel.contentView?.frame.height
     }
 
     /// Enter/Esc need to work no matter which control has focus — doCommandBy: on the search

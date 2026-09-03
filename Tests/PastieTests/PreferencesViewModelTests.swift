@@ -60,5 +60,6 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertEqual(vm.hotkeyDisplay, "⌃⇧S")
         XCTAssertTrue(changed)
         XCTAssertEqual(store.hotkeyKeyCode, 1)
+        XCTAssertEqual(store.hotkeyModifiers, UInt32(NSEvent.ModifierFlags([.control, .shift]).rawValue))
     }
 }
