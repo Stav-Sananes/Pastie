@@ -10,6 +10,11 @@ final class PreferencesStore {
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
         static let launchAtLogin = "launchAtLogin"
+        static let captureText = "captureText"
+        static let captureImages = "captureImages"
+        static let captureFiles = "captureFiles"
+        static let maxImageSizeMB = "maxImageSizeMB"
+        static let popupRowCount = "popupRowCount"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -42,5 +47,30 @@ final class PreferencesStore {
     var launchAtLogin: Bool {
         get { defaults.bool(forKey: Keys.launchAtLogin) }
         set { defaults.set(newValue, forKey: Keys.launchAtLogin) }
+    }
+
+    var captureText: Bool {
+        get { defaults.object(forKey: Keys.captureText) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.captureText) }
+    }
+
+    var captureImages: Bool {
+        get { defaults.object(forKey: Keys.captureImages) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.captureImages) }
+    }
+
+    var captureFiles: Bool {
+        get { defaults.object(forKey: Keys.captureFiles) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.captureFiles) }
+    }
+
+    var maxImageSizeMB: Int {
+        get { defaults.object(forKey: Keys.maxImageSizeMB) as? Int ?? 5 }
+        set { defaults.set(newValue, forKey: Keys.maxImageSizeMB) }
+    }
+
+    var popupRowCount: Int {
+        get { defaults.object(forKey: Keys.popupRowCount) as? Int ?? 8 }
+        set { defaults.set(newValue, forKey: Keys.popupRowCount) }
     }
 }
