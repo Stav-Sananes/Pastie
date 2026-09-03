@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController = MenuBarController(
             popupController: popupController,
             clipStore: clipStore,
+            preferences: preferences,
             onOpenPreferences: { [weak self] in self?.openPreferences() }
         )
 
