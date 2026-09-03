@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        popupController = PopupWindowController(store: clipStore, pasteEngine: PasteEngine())
+        popupController = PopupWindowController(store: clipStore, pasteEngine: PasteEngine(), preferences: preferences)
 
         menuBarController = MenuBarController(
             popupController: popupController,

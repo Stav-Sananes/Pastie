@@ -2,8 +2,18 @@
 import AppKit
 
 final class PopupWindowController: NSObject, NSWindowDelegate {
+    /// Non-list chrome (search field + margins) in buildPanel()'s base layout — total
+    /// panel height minus the space given to the row list.
+    static let chromeHeight: CGFloat = 56
+    static let rowHeight: CGFloat = 24
+
+    static func panelHeight(forRows rows: Int) -> CGFloat {
+        chromeHeight + CGFloat(max(1, rows)) * rowHeight
+    }
+
     private let store: ClipStore
     private let pasteEngine: PasteEngine
+    private let preferences: PreferencesStore
     private var panel: NSPanel!
     private var searchField: NSSearchField!
     private var tableView: NSTableView!
@@ -20,9 +30,10 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     /// ClipboardMonitor.tick() doesn't re-capture what we just pasted as a brand-new clip.
     weak var clipboardMonitor: ClipboardMonitor?
 
-    init(store: ClipStore, pasteEngine: PasteEngine) {
+    init(store: ClipStore, pasteEngine: PasteEngine, preferences: PreferencesStore) {
         self.store = store
         self.pasteEngine = pasteEngine
+        self.preferences = preferences
         super.init()
         buildPanel()
     }
@@ -76,6 +87,9 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     func show() {
         previousApp = NSWorkspace.shared.frontmostApplication
         refresh()
+        var frame = panel.frame
+        frame.size.height = Self.panelHeight(forRows: preferences.popupRowCount)
+        panel.setFrame(frame, display: false)
         panel.center()
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(searchField)
