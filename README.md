@@ -7,7 +7,7 @@ macOS keeps exactly one thing on the clipboard. Copy something else and the prev
 gone. Pastie keeps a history of what you copied, lets you search it, and pastes any entry
 straight into whatever app you are using.
 
-**Status:** working, unreleased, version 0.1.0. Built for macOS 13 and later. 49 tests pass.
+**Status:** working, version 0.1.0. Built for macOS 13 and later. 49 tests pass.
 
 ---
 
@@ -38,9 +38,13 @@ straight into whatever app you are using.
 
 ## Installing
 
-There is no published release yet. When one is tagged, it will be a `Pastie.app.zip` attached to
-a [GitHub release](https://github.com/Stav-Sananes/Pastie/releases). Until then, build it
-yourself — see [For developers](#for-developers).
+Download `Pastie.app.zip` from the
+[latest release](https://github.com/Stav-Sananes/Pastie/releases/latest), unzip it, and move
+`Pastie.app` to your Applications folder. Then read the next section, because macOS will not let
+you open it on the first try.
+
+Prefer to build it yourself? See [For developers](#for-developers) — it takes about a minute and
+skips the Gatekeeper problem entirely, because a locally built app is never quarantined.
 
 ### The Gatekeeper warning, and why you will get one
 
@@ -298,10 +302,16 @@ not. Nothing above is a promise; it is a record of what has been thought through
 
 ## Distribution
 
-Currently source-only. A signed and notarised build needs a paid Apple Developer Program
-membership, which would also unlock in-app updates. Until then, an unsigned release zip is
-possible but puts every downloader through the Gatekeeper detour described above, so building
-from source is the recommended path.
+Releases are ad-hoc signed zips attached to GitHub releases. `Scripts/build-app.sh` signs the
+bundle with `codesign --sign -` and packages it with `ditto`, which preserves the signature that
+a plain `zip` would corrupt.
+
+Ad-hoc is not Developer ID: it satisfies Apple Silicon's requirement that every binary carry a
+signature, but it tells Gatekeeper nothing about who built it, so a downloaded copy is blocked
+until the user allows it explicitly. Removing that friction needs a paid Apple Developer Program
+membership for Developer ID signing and notarisation — which would also unlock in-app updates.
+The build script takes a `SIGN_IDENTITY` environment variable so that switch is one variable and
+a notarisation step, not a rewrite.
 
 ## Licence
 
