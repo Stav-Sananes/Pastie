@@ -53,14 +53,17 @@ final class ClipboardMonitor {
             return
         }
 
-        guard let clip = makeClip(from: pasteboard, sourceApp: bundleID) else { return }
-
+        // Cheap type check (no decode) before the expensive read in makeClip() — a disabled
+        // type shouldn't pay for a full image decode/downsample just to be discarded.
+        guard let inferredType = inferClipType(from: pasteboard) else { return }
         guard CaptureFilter.isTypeEnabled(
-            clip.type,
+            inferredType,
             captureText: preferences.captureText,
             captureImages: preferences.captureImages,
             captureFiles: preferences.captureFiles
         ) else { return }
+
+        guard let clip = makeClip(from: pasteboard, sourceApp: bundleID) else { return }
 
         if let last = try? store.mostRecent(), last.hasSameContent(as: clip) {
             return
@@ -71,6 +74,22 @@ final class ClipboardMonitor {
         } catch {
             NSLog("ClipboardMonitor: failed to insert clip: \(error)")
         }
+    }
+
+    /// Mirrors makeClip()'s file → image → text precedence, but only checks feasibility
+    /// (canReadObject) instead of materializing the object — so the type gate above can
+    /// reject a disabled type before paying for a full image decode/downsample.
+    private func inferClipType(from pasteboard: NSPasteboard) -> ClipType? {
+        if pasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) {
+            return .file
+        }
+        if pasteboard.canReadObject(forClasses: [NSImage.self], options: nil) {
+            return .image
+        }
+        if pasteboard.canReadObject(forClasses: [NSString.self], options: nil) {
+            return .text
+        }
+        return nil
     }
 
     private func makeClip(from pasteboard: NSPasteboard, sourceApp: String?) -> Clip? {
