@@ -31,6 +31,12 @@ final class HotkeyRecorderNSView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
 
+    override var wantsUpdateLayer: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        bounds.contains(convert(point, from: superview)) ? self : super.hitTest(point)
+    }
+
     override func mouseDown(with event: NSEvent) {
         isRecording = true
         window?.makeFirstResponder(self)
