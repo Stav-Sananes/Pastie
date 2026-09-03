@@ -10,6 +10,21 @@
 
 **Spec:** `/Users/stavnsananes/Applications/Pastie/docs/superpowers/specs/2026-09-02-pastie-sync-design.md`
 
+> **Ordering note (added 2026-09-04):** this plan is now the *last* of three. The
+> menu/Settings redesign and Pastie v3 both land before it, and v3 changes two
+> things this plan depended on:
+>
+> - **Migration numbering.** v3 claims migration 2 (renaming `pinned` → `saved`,
+>   adding `rtfData` and `slotIndex`). Sync's `addSyncColumns` is therefore
+>   **migration 3**, registered after v3's. The migration-backfill test below
+>   seeds a v1-shaped schema and lets both later migrations run.
+> - **`Clip.pinned` no longer exists.** Every `Clip(...)` literal in this plan now
+>   passes `saved:`. v3 gives `rtfData` and `slotIndex` default values, so call
+>   sites that omit them still compile.
+>
+> If v3 has *not* landed when you execute this, stop and re-check both points
+> rather than adapting the code to a schema that is about to change underneath it.
+
 ## Global Constraints
 
 - Platform floor: macOS 13.0 (unchanged from v1).
@@ -30,7 +45,7 @@
 ```
 Sources/Pastie/
   Models/Clip.swift                    MODIFY  +uuid, +originDevice
-  Storage/ClipStore.swift              MODIFY  migration 2, clipExists(uuid:)
+  Storage/ClipStore.swift              MODIFY  migration 3, clipExists(uuid:)
   Capture/ClipboardMonitor.swift       MODIFY  +onLocalClipCaptured callback
   Preferences/PreferencesStore.swift   MODIFY  +syncEnabled, +deviceID, +deviceName
   AppDelegate.swift                    MODIFY  wire sync when enabled
@@ -74,7 +89,7 @@ Tests/PastieTests/
 extension ClipStoreTests {
     func testInsertPreservesUUIDAndOriginDevice() throws {
         let store = try makeStore()
-        let clip = Clip(id: nil, uuid: "fixed-uuid-1", type: .text, textContent: "hi", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0, originDevice: "device-A")
+        let clip = Clip(id: nil, uuid: "fixed-uuid-1", type: .text, textContent: "hi", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0, originDevice: "device-A")
         _ = try store.insert(clip)
 
         let all = try store.fetchAll()
@@ -84,7 +99,7 @@ extension ClipStoreTests {
 
     func testClipExistsByUUID() throws {
         let store = try makeStore()
-        _ = try store.insert(Clip(id: nil, uuid: "known", type: .text, textContent: "x", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+        _ = try store.insert(Clip(id: nil, uuid: "known", type: .text, textContent: "x", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
 
         XCTAssertTrue(try store.clipExists(uuid: "known"))
         XCTAssertFalse(try store.clipExists(uuid: "unknown"))
@@ -92,8 +107,8 @@ extension ClipStoreTests {
 
     func testDefaultUUIDIsGeneratedAndUnique() throws {
         let store = try makeStore()
-        let a = try store.insert(Clip(id: nil, type: .text, textContent: "a", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
-        let b = try store.insert(Clip(id: nil, type: .text, textContent: "b", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+        let a = try store.insert(Clip(id: nil, type: .text, textContent: "a", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
+        let b = try store.insert(Clip(id: nil, type: .text, textContent: "b", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
 
         XCTAssertFalse(a.uuid.isEmpty)
         XCTAssertNotEqual(a.uuid, b.uuid)
@@ -102,7 +117,7 @@ extension ClipStoreTests {
 
     func testMigrationBackfillsUUIDOnPreExistingRows() throws {
         // Simulate a v1 database: create the v1 schema and insert a row with no uuid column,
-        // then open it through ClipStore (which runs both migrations) and confirm backfill.
+        // then open it through ClipStore (which runs migrations 2 and 3) and confirm backfill.
         let dbQueue = try DatabaseQueue()
         try dbQueue.write { db in
             try db.create(table: "clip") { t in
@@ -116,7 +131,7 @@ extension ClipStoreTests {
                 t.column("pinned", .boolean).notNull().defaults(to: false)
                 t.column("sortOrder", .integer).notNull().defaults(to: 0)
             }
-            // Mark migration 1 as already applied so ClipStore only runs migration 2.
+            // Mark migration 1 as already applied so ClipStore runs migrations 2 (v3) and 3 (sync).
             try db.execute(sql: "CREATE TABLE IF NOT EXISTS grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)")
             try db.execute(sql: "INSERT INTO grdb_migrations (identifier) VALUES ('createClip')")
             try db.execute(sql: """
@@ -154,7 +169,7 @@ struct Clip: Identifiable, Equatable, Codable {
     var filePath: String?
     var sourceApp: String?
     var timestamp: Date
-    var pinned: Bool
+    var saved: Bool
     var sortOrder: Int64
     /// Device ID this clip arrived from; nil for locally-captured clips.
     /// Non-nil is the loop-prevention guard: such clips are never re-broadcast.
@@ -1000,7 +1015,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let b = FakeTransport(peerID: "b", peerName: "B")
         let (coordinator, _) = try makeCoordinator(transports: [a, b])
 
-        coordinator.handleLocalClip(Clip(id: 1, uuid: "clip-1", type: .text, textContent: "shared", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+        coordinator.handleLocalClip(Clip(id: 1, uuid: "clip-1", type: .text, textContent: "shared", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
 
         XCTAssertEqual(a.sent.count, 1)
         XCTAssertEqual(b.sent.count, 1)
@@ -1015,7 +1030,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let (coordinator, _) = try makeCoordinator(transports: [peer])
 
         // A clip that arrived from another machine: originDevice is set.
-        coordinator.handleLocalClip(Clip(id: 1, uuid: "clip-2", type: .text, textContent: "echo", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0, originDevice: "other-device"))
+        coordinator.handleLocalClip(Clip(id: 1, uuid: "clip-2", type: .text, textContent: "echo", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0, originDevice: "other-device"))
 
         XCTAssertTrue(peer.sent.isEmpty, "re-broadcasting a received clip would loop forever")
     }
@@ -1093,7 +1108,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let bigFile = tempDir.appendingPathComponent("big.bin")
         try Data(repeating: 0x01, count: 11).write(to: bigFile)
 
-        coordinator.handleLocalClip(Clip(id: 1, uuid: "big", type: .file, textContent: nil, imageData: nil, filePath: bigFile.path, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+        coordinator.handleLocalClip(Clip(id: 1, uuid: "big", type: .file, textContent: nil, imageData: nil, filePath: bigFile.path, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
 
         XCTAssertTrue(peer.sent.isEmpty, "files over the ceiling are not synced")
     }
@@ -1241,7 +1256,7 @@ final class SyncCoordinator {
             filePath: filePath,
             sourceApp: message.originDeviceName,
             timestamp: timestamp,
-            pinned: false,
+            saved: false,
             sortOrder: 0,
             originDevice: message.originDeviceID
         )
@@ -1796,7 +1811,7 @@ final class SyncIntegrationTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { connected.fulfill() }
         wait(for: [connected], timeout: 5.0)
 
-        let clip = Clip(id: 1, uuid: "crossing-clip", type: .text, textContent: "hello from the other Mac", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0)
+        let clip = Clip(id: 1, uuid: "crossing-clip", type: .text, textContent: "hello from the other Mac", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0)
         senderCoordinatorBroadcast(sender, clip: clip)
 
         // Poll for arrival rather than sleeping a fixed amount.
