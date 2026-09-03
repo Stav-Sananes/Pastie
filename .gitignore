@@ -2,3 +2,8 @@
 .DS_Store
 build/
 .worktrees/
+
+# grill-with-docs artifacts (local only)
+CONTEXT.md
+docs/adr/
+docs/superpowers/specs/2026-09-04-pastie-v3-design.md
