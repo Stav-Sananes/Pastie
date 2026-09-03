@@ -1,33 +1,22 @@
 import SwiftUI
 
+// Each tab is a standalone file under SettingsTabs/ taking the shared viewModel.
+// Adding a future tab (e.g. "Groups", "Actions") means: one new file + one new
+// case here — never gate anything elsewhere on "there are 4 tabs".
 struct PreferencesView: View {
     @ObservedObject var viewModel: PreferencesViewModel
 
     var body: some View {
-        Form {
-            Stepper("Retention: \(viewModel.retentionCount) items", value: $viewModel.retentionCount, in: 50...5000, step: 50)
-            Toggle("Launch at login", isOn: $viewModel.launchAtLogin)
-            Section("Excluded Apps") {
-                List {
-                    ForEach(viewModel.excludedBundleIDs, id: \.self) { id in
-                        HStack {
-                            Text(id)
-                            Spacer()
-                            Button("Remove") {
-                                guard let index = viewModel.excludedBundleIDs.firstIndex(of: id) else { return }
-                                viewModel.removeExcluded(at: IndexSet(integer: index))
-                            }
-                        }
-                    }
-                    .onDelete(perform: viewModel.removeExcluded)
-                }
-                HStack {
-                    TextField("Bundle ID (e.g. com.1password.1password)", text: $viewModel.newBundleID)
-                    Button("Add") { viewModel.addExcluded() }
-                }
-            }
+        TabView {
+            GeneralTab(viewModel: viewModel)
+                .tabItem { Label("General", systemImage: "gearshape") }
+            HotkeyTab(viewModel: viewModel)
+                .tabItem { Label("Hotkey", systemImage: "keyboard") }
+            CaptureTab(viewModel: viewModel)
+                .tabItem { Label("Capture", systemImage: "tray.and.arrow.down") }
+            AppearanceTab(viewModel: viewModel)
+                .tabItem { Label("Appearance", systemImage: "paintbrush") }
         }
-        .padding()
-        .frame(width: 380, height: 420)
+        .frame(width: 480, height: 360)
     }
 }
