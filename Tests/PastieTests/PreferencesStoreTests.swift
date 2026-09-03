@@ -33,4 +33,38 @@ final class PreferencesStoreTests: XCTestCase {
     func testLaunchAtLoginDefaultsToFalse() {
         XCTAssertFalse(makeStore().launchAtLogin)
     }
+
+    func testCaptureTypeTogglesDefaultToTrue() {
+        let store = makeStore()
+        XCTAssertTrue(store.captureText)
+        XCTAssertTrue(store.captureImages)
+        XCTAssertTrue(store.captureFiles)
+    }
+
+    func testCaptureTypeTogglesRoundTrip() {
+        let store = makeStore()
+        store.captureImages = false
+        XCTAssertFalse(store.captureImages)
+        XCTAssertTrue(store.captureText)
+    }
+
+    func testMaxImageSizeMBDefaultsTo5() {
+        XCTAssertEqual(makeStore().maxImageSizeMB, 5)
+    }
+
+    func testMaxImageSizeMBRoundTrips() {
+        let store = makeStore()
+        store.maxImageSizeMB = 25
+        XCTAssertEqual(store.maxImageSizeMB, 25)
+    }
+
+    func testPopupRowCountDefaultsTo8() {
+        XCTAssertEqual(makeStore().popupRowCount, 8)
+    }
+
+    func testPopupRowCountRoundTrips() {
+        let store = makeStore()
+        store.popupRowCount = 12
+        XCTAssertEqual(store.popupRowCount, 12)
+    }
 }
