@@ -52,7 +52,7 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     private func buildPanel() {
         panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 360),
-            styleMask: [.titled, .nonactivatingPanel, .resizable],
+            styleMask: [.titled, .closable, .nonactivatingPanel, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -388,6 +388,14 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     // NSWindowDelegate
     func windowDidResignKey(_ notification: Notification) {
         hide()
+    }
+
+    /// The title bar's close button. Routed through hide() rather than letting the panel close
+    /// itself, so the local key monitor is torn down the same way Esc tears it down — and the
+    /// panel is kept alive to be shown again, instead of being released.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        hide()
+        return false
     }
 }
 
