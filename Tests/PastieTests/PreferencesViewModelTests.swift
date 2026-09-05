@@ -10,35 +10,46 @@ final class PreferencesViewModelTests: XCTestCase {
 
     func testAddExcludedAppendsAndSorts() {
         let vm = makeViewModel()
-        vm.newBundleID = "com.zzz.app"
-        vm.addExcluded()
-        vm.newBundleID = "com.aaa.app"
-        vm.addExcluded()
+
+        vm.addExcluded(bundleIDs: ["com.zzz.app"])
+        vm.addExcluded(bundleIDs: ["com.aaa.app"])
 
         XCTAssertEqual(vm.excludedBundleIDs, ["com.aaa.app", "com.zzz.app"])
-        XCTAssertEqual(vm.newBundleID, "")
+    }
+
+    func testAddExcludedTakesSeveralAppsAtOnce() {
+        let vm = makeViewModel()
+
+        vm.addExcluded(bundleIDs: ["com.zzz.app", "com.aaa.app"])
+
+        XCTAssertEqual(vm.excludedBundleIDs, ["com.aaa.app", "com.zzz.app"], "the picker allows a multiple selection")
     }
 
     func testAddExcludedIgnoresBlankAndDuplicate() {
         let vm = makeViewModel()
-        vm.newBundleID = "com.example.app"
-        vm.addExcluded()
-        vm.newBundleID = "com.example.app"
-        vm.addExcluded()
-        vm.newBundleID = "   "
-        vm.addExcluded()
+
+        vm.addExcluded(bundleIDs: ["com.example.app"])
+        vm.addExcluded(bundleIDs: ["com.example.app", "   ", ""])
 
         XCTAssertEqual(vm.excludedBundleIDs, ["com.example.app"])
     }
 
     func testRemoveExcluded() {
         let vm = makeViewModel()
-        vm.newBundleID = "com.example.app"
-        vm.addExcluded()
+        vm.addExcluded(bundleIDs: ["com.example.app"])
 
         vm.removeExcluded(at: IndexSet(integer: 0))
 
         XCTAssertTrue(vm.excludedBundleIDs.isEmpty)
+    }
+
+    func testRemoveExcludedByBundleID() {
+        let vm = makeViewModel()
+        vm.addExcluded(bundleIDs: ["com.a.app", "com.b.app"])
+
+        vm.removeExcluded(bundleIDs: ["com.a.app"])
+
+        XCTAssertEqual(vm.excludedBundleIDs, ["com.b.app"], "the list removes what the selection names, not an index it guessed")
     }
 
     func testCaptureTogglesDefaultToTrueAndRoundTrip() {

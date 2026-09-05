@@ -15,7 +15,7 @@ final class HotkeyRecorderNSView: NSView {
     var displayText: String = "" {
         didSet {
             guard !isRecording else { return }
-            label.stringValue = displayText
+            label.stringValue = displayText.isEmpty ? "Click to record" : displayText
         }
     }
 
@@ -25,6 +25,7 @@ final class HotkeyRecorderNSView: NSView {
         label.frame = bounds
         label.autoresizingMask = [.width, .height]
         label.alignment = .center
+        label.font = .systemFont(ofSize: 13, weight: .medium)
         addSubview(label)
     }
 
@@ -66,10 +67,17 @@ final class HotkeyRecorderNSView: NSView {
         return super.resignFirstResponder()
     }
 
+    /// Drawn as a field, not as bare text: without a border there is nothing to tell anyone this
+    /// is a control that can be clicked.
     override func updateLayer() {
+        layer?.cornerRadius = 5
+        layer?.borderWidth = 1
+        layer?.borderColor = isRecording
+            ? NSColor.controlAccentColor.cgColor
+            : NSColor.separatorColor.cgColor
         layer?.backgroundColor = isRecording
-            ? NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
-            : NSColor.clear.cgColor
+            ? NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor
+            : NSColor.textBackgroundColor.cgColor
     }
 }
 
