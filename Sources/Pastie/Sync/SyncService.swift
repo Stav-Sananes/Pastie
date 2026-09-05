@@ -31,10 +31,27 @@ final class SyncService {
 
     private var listener: NWListener?
     private var browser: NWBrowser?
+
+    /// Guards `transports` and `_peers`, which are mutated on `queue` but read from
+    /// arbitrary threads (`transportsProvider`, the public `peers` getter). Never call
+    /// `onPeersChanged` while holding this — it can run arbitrary UI code.
+    private let lock = NSLock()
     private var transports: [String: NWConnectionTransport] = [:]
-    private(set) var peers: [SyncPeerStatus] = []
+    private var _peers: [SyncPeerStatus] = []
+
+    /// Peer IDs whose most recent connection attempt failed the TLS-PSK handshake.
+    /// Consulted and cleared by `removeTransport` so a wrong-passphrase failure isn't
+    /// overwritten by the plain `disconnected` that follows from tearing the
+    /// connection down. Only ever touched from `queue`, so it needs no lock of its own.
+    private var authFailedPeerIDs: Set<String> = []
 
     var onPeersChanged: (([SyncPeerStatus]) -> Void)?
+
+    var peers: [SyncPeerStatus] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _peers
+    }
 
     var listeningPort: NWEndpoint.Port? { listener?.port }
 
@@ -52,6 +69,8 @@ final class SyncService {
         self.requestedPort = port
         coordinator.transportsProvider = { [weak self] in
             guard let self else { return [] }
+            self.lock.lock()
+            defer { self.lock.unlock() }
             return Array(self.transports.values)
         }
     }
@@ -115,12 +134,18 @@ final class SyncService {
         listener = nil
         browser?.cancel()
         browser = nil
-        for transport in transports.values {
+
+        lock.lock()
+        let closingTransports = Array(transports.values)
+        transports.removeAll()
+        _peers = []
+        let snapshot = _peers
+        lock.unlock()
+
+        for transport in closingTransports {
             transport.close()
         }
-        transports.removeAll()
-        peers = []
-        onPeersChanged?(peers)
+        onPeersChanged?(snapshot)
     }
 
     // MARK: - Connections
@@ -132,7 +157,6 @@ final class SyncService {
 
     private func adopt(connection: NWConnection, peerName: String) {
         let peerID = peerName
-        guard transports[peerID] == nil else { return }
 
         let transport = NWConnectionTransport(connection: connection, peerID: peerID, peerName: peerName, queue: queue)
         transport.onReceive = { [weak self] data in
@@ -142,6 +166,19 @@ final class SyncService {
             self?.removeTransport(peerID: peerID, name: peerName, failedAuth: false)
         }
 
+        lock.lock()
+        guard transports[peerID] == nil else {
+            lock.unlock()
+            return
+        }
+        transports[peerID] = transport
+        lock.unlock()
+
+        // Start the transport first, then install our own state handler: NWConnectionTransport.start()
+        // sets connection.stateUpdateHandler itself (to drive its own teardown-on-failure), and whichever
+        // handler is assigned last is the one that survives. Installing ours second means we see
+        // .ready/.failed/.cancelled directly, and we take over driving teardown ourselves below.
+        transport.start()
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
             switch state {
@@ -152,30 +189,48 @@ final class SyncService {
                 // be visible in the UI: a mistyped passphrase is the likeliest failure in
                 // this whole feature, and silence is the worst possible response to it.
                 NSLog("SyncService: connection to \(peerName) failed: \(error)")
-                self.removeTransport(peerID: peerID, name: peerName, failedAuth: true)
+                self.authFailedPeerIDs.insert(peerID)
+                self.closeTransport(for: peerID)
             case .cancelled:
-                self.removeTransport(peerID: peerID, name: peerName, failedAuth: false)
+                self.closeTransport(for: peerID)
             default:
                 break
             }
         }
+    }
 
-        transports[peerID] = transport
-        transport.start()
+    /// Looks up the still-registered transport for `peerID` and closes it. Since we now own
+    /// `connection.stateUpdateHandler` (see `adopt`), we're responsible for driving teardown
+    /// on `.failed`/`.cancelled` ourselves rather than relying on NWConnectionTransport's own
+    /// (now-overwritten) handler. `close()` is idempotent and its `onClose` callback — which
+    /// calls `removeTransport` — fires exactly once regardless of how teardown was triggered.
+    private func closeTransport(for peerID: String) {
+        lock.lock()
+        let transport = transports[peerID]
+        lock.unlock()
+        transport?.close()
     }
 
     private func removeTransport(peerID: String, name: String, failedAuth: Bool) {
+        lock.lock()
         transports[peerID] = nil
-        updatePeer(SyncPeerStatus(id: peerID, name: name, state: failedAuth ? .authenticationFailed : .disconnected))
+        lock.unlock()
+
+        let wasAuthFailure = authFailedPeerIDs.remove(peerID) != nil
+        let state: SyncPeerStatus.State = (failedAuth || wasAuthFailure) ? .authenticationFailed : .disconnected
+        updatePeer(SyncPeerStatus(id: peerID, name: name, state: state))
     }
 
     private func updatePeer(_ status: SyncPeerStatus) {
-        if let index = peers.firstIndex(where: { $0.id == status.id }) {
-            peers[index] = status
+        lock.lock()
+        if let index = _peers.firstIndex(where: { $0.id == status.id }) {
+            _peers[index] = status
         } else {
-            peers.append(status)
+            _peers.append(status)
         }
-        let snapshot = peers
+        let snapshot = _peers
+        lock.unlock()
+
         DispatchQueue.main.async { [weak self] in
             self?.onPeersChanged?(snapshot)
         }
