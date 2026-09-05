@@ -18,6 +18,7 @@ final class PreferencesStore {
         static let rtfCaptureEnabled = "rtfCaptureEnabled"
         static let rtfSizeCapBytes = "rtfSizeCapBytes"
         static let slotHotkeyModifiers = "slotHotkeyModifiers"
+        static let accessibilityExplainedForVersion = "accessibilityExplainedForVersion"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -57,6 +58,14 @@ final class PreferencesStore {
                 ?? UInt32(NSEvent.ModifierFlags([.option, .command]).rawValue)
         }
         set { defaults.set(newValue, forKey: Keys.hotkeyModifiers) }
+    }
+
+    /// The app version whose launch last explained the Accessibility permission. Empty until it
+    /// has been shown once. Keyed by version so a user who upgrades — which invalidates the
+    /// permission for an ad-hoc signed build — is told again, exactly once.
+    var accessibilityExplainedForVersion: String {
+        get { defaults.string(forKey: Keys.accessibilityExplainedForVersion) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.accessibilityExplainedForVersion) }
     }
 
     /// Modifier combination for the global quick-paste hotkeys, applied to digits 1–9.

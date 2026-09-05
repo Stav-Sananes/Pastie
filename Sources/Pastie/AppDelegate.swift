@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.slotHotkeys.registerBoundSlots()
         }
 
-        onboarding = OnboardingController()
+        onboarding = OnboardingController(preferences: preferences)
         onboarding.presentIfNeeded()
     }
 
