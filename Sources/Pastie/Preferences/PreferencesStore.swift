@@ -17,6 +17,7 @@ final class PreferencesStore {
         static let popupRowCount = "popupRowCount"
         static let rtfCaptureEnabled = "rtfCaptureEnabled"
         static let rtfSizeCapBytes = "rtfSizeCapBytes"
+        static let slotHotkeyModifiers = "slotHotkeyModifiers"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -56,6 +57,15 @@ final class PreferencesStore {
                 ?? UInt32(NSEvent.ModifierFlags([.option, .command]).rawValue)
         }
         set { defaults.set(newValue, forKey: Keys.hotkeyModifiers) }
+    }
+
+    /// Modifier combination for the global quick-paste hotkeys, applied to digits 1–9.
+    var slotHotkeyModifiers: UInt32 {
+        get {
+            defaults.object(forKey: Keys.slotHotkeyModifiers) as? UInt32
+                ?? UInt32(NSEvent.ModifierFlags([.option, .command]).rawValue)
+        }
+        set { defaults.set(newValue, forKey: Keys.slotHotkeyModifiers) }
     }
 
     var launchAtLogin: Bool {
