@@ -6,9 +6,9 @@ import GRDB
 final class ClipStoreTests: XCTestCase {
     func testClipContentEquality() {
         let now = Date()
-        let a = Clip(id: nil, type: .text, textContent: "hello", imageData: nil, filePath: nil, sourceApp: nil, timestamp: now, pinned: false, sortOrder: 0)
-        let b = Clip(id: 99, type: .text, textContent: "hello", imageData: nil, filePath: nil, sourceApp: "other", timestamp: now.addingTimeInterval(10), pinned: true, sortOrder: 5)
-        let c = Clip(id: nil, type: .text, textContent: "different", imageData: nil, filePath: nil, sourceApp: nil, timestamp: now, pinned: false, sortOrder: 0)
+        let a = Clip(id: nil, type: .text, textContent: "hello", imageData: nil, filePath: nil, sourceApp: nil, timestamp: now, saved: false, sortOrder: 0)
+        let b = Clip(id: 99, type: .text, textContent: "hello", imageData: nil, filePath: nil, sourceApp: "other", timestamp: now.addingTimeInterval(10), saved: true, sortOrder: 5)
+        let c = Clip(id: nil, type: .text, textContent: "different", imageData: nil, filePath: nil, sourceApp: nil, timestamp: now, saved: false, sortOrder: 0)
 
         XCTAssertTrue(a.hasSameContent(as: b))
         XCTAssertFalse(a.hasSameContent(as: c))
@@ -21,7 +21,7 @@ final class ClipStoreTests: XCTestCase {
 
     func testInsertAndFetchAll() throws {
         let store = try makeStore()
-        let clip = Clip(id: nil, type: .text, textContent: "hello", imageData: nil, filePath: nil, sourceApp: "com.apple.Terminal", timestamp: Date(), pinned: false, sortOrder: 0)
+        let clip = Clip(id: nil, type: .text, textContent: "hello", imageData: nil, filePath: nil, sourceApp: "com.apple.Terminal", timestamp: Date(), saved: false, sortOrder: 0)
 
         _ = try store.insert(clip)
         let all = try store.fetchAll()
@@ -33,8 +33,8 @@ final class ClipStoreTests: XCTestCase {
 
     func testMostRecentReturnsLatestByTimestamp() throws {
         let store = try makeStore()
-        let older = Clip(id: nil, type: .text, textContent: "old", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(-10), pinned: false, sortOrder: 0)
-        let newer = Clip(id: nil, type: .text, textContent: "new", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0)
+        let older = Clip(id: nil, type: .text, textContent: "old", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(-10), saved: false, sortOrder: 0)
+        let newer = Clip(id: nil, type: .text, textContent: "new", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0)
 
         _ = try store.insert(older)
         _ = try store.insert(newer)
@@ -44,10 +44,10 @@ final class ClipStoreTests: XCTestCase {
 }
 
 extension ClipStoreTests {
-    func testRetentionEvictsOldestUnpinned() throws {
+    func testRetentionEvictsOldestUnsaved() throws {
         let store = try makeStore(retentionCount: 2)
         for i in 0..<3 {
-            let clip = Clip(id: nil, type: .text, textContent: "clip\(i)", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(Double(i)), pinned: false, sortOrder: 0)
+            let clip = Clip(id: nil, type: .text, textContent: "clip\(i)", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(Double(i)), saved: false, sortOrder: 0)
             _ = try store.insert(clip)
         }
         let all = try store.fetchAll()
@@ -55,12 +55,12 @@ extension ClipStoreTests {
         XCTAssertFalse(all.contains { $0.textContent == "clip0" })
     }
 
-    func testPinnedItemsExemptFromEviction() throws {
+    func testSavedItemsExemptFromEviction() throws {
         let store = try makeStore(retentionCount: 1)
-        let pinned = try store.insert(Clip(id: nil, type: .text, textContent: "keep", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(-100), pinned: false, sortOrder: 0))
-        try store.setPinned(true, id: pinned.id!)
-        _ = try store.insert(Clip(id: nil, type: .text, textContent: "newer1", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
-        _ = try store.insert(Clip(id: nil, type: .text, textContent: "newer2", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(1), pinned: false, sortOrder: 0))
+        let savedClip = try store.insert(Clip(id: nil, type: .text, textContent: "keep", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(-100), saved: false, sortOrder: 0))
+        try store.setSaved(true, id: savedClip.id!)
+        _ = try store.insert(Clip(id: nil, type: .text, textContent: "newer1", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
+        _ = try store.insert(Clip(id: nil, type: .text, textContent: "newer2", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(1), saved: false, sortOrder: 0))
 
         let all = try store.fetchAll()
         XCTAssertTrue(all.contains { $0.textContent == "keep" })
@@ -72,13 +72,13 @@ extension ClipStoreTests {
         let store = try ClipStore(dbQueue: dbQueue, retentionCountProvider: { liveRetentionCount })
 
         for i in 0..<3 {
-            _ = try store.insert(Clip(id: nil, type: .text, textContent: "clip\(i)", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(Double(i)), pinned: false, sortOrder: 0))
+            _ = try store.insert(Clip(id: nil, type: .text, textContent: "clip\(i)", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(Double(i)), saved: false, sortOrder: 0))
         }
         XCTAssertEqual(try store.fetchAll().count, 3, "with a high retention count nothing should be evicted yet")
 
         // Simulate the user lowering the retention preference at runtime — no ClipStore recreation.
         liveRetentionCount = 1
-        _ = try store.insert(Clip(id: nil, type: .text, textContent: "clip3", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(3), pinned: false, sortOrder: 0))
+        _ = try store.insert(Clip(id: nil, type: .text, textContent: "clip3", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date().addingTimeInterval(3), saved: false, sortOrder: 0))
 
         let all = try store.fetchAll()
         XCTAssertEqual(all.count, 1, "the new lower retention count should be honored immediately, without recreating ClipStore")
@@ -87,21 +87,98 @@ extension ClipStoreTests {
 
     func testDeleteRemovesItem() throws {
         let store = try makeStore()
-        let clip = try store.insert(Clip(id: nil, type: .text, textContent: "gone", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+        let clip = try store.insert(Clip(id: nil, type: .text, textContent: "gone", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
         try store.delete(id: clip.id!)
         XCTAssertTrue(try store.fetchAll().isEmpty)
     }
 
-    func testClearAllKeepsPinned() throws {
+    func testClearAllKeepsSaved() throws {
         let store = try makeStore()
-        let pinned = try store.insert(Clip(id: nil, type: .text, textContent: "pinned", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
-        try store.setPinned(true, id: pinned.id!)
-        _ = try store.insert(Clip(id: nil, type: .text, textContent: "unpinned", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+        let savedClip = try store.insert(Clip(id: nil, type: .text, textContent: "saved", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
+        try store.setSaved(true, id: savedClip.id!)
+        _ = try store.insert(Clip(id: nil, type: .text, textContent: "unsaved", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
 
         try store.clearAll()
 
         let all = try store.fetchAll()
         XCTAssertEqual(all.count, 1)
-        XCTAssertEqual(all.first?.textContent, "pinned")
+        XCTAssertEqual(all.first?.textContent, "saved")
+    }
+
+    func testMigrationRenamesPinnedToSavedAndPreservesRows() throws {
+        // Build a v1-shaped database by hand, then open it through ClipStore so migration 2 runs.
+        let dbQueue = try DatabaseQueue()
+        try dbQueue.write { db in
+            try db.create(table: "clip") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("type", .text).notNull()
+                t.column("textContent", .text)
+                t.column("imageData", .blob)
+                t.column("filePath", .text)
+                t.column("sourceApp", .text)
+                t.column("timestamp", .datetime).notNull()
+                t.column("pinned", .boolean).notNull().defaults(to: false)
+                t.column("sortOrder", .integer).notNull().defaults(to: 0)
+            }
+            try db.execute(sql: "CREATE TABLE IF NOT EXISTS grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)")
+            try db.execute(sql: "INSERT INTO grdb_migrations (identifier) VALUES ('createClip')")
+            try db.execute(sql: """
+                INSERT INTO clip (type, textContent, timestamp, pinned, sortOrder)
+                VALUES ('text', 'kept me', ?, 1, 0)
+                """, arguments: [Date()])
+            try db.execute(sql: """
+                INSERT INTO clip (type, textContent, timestamp, pinned, sortOrder)
+                VALUES ('text', 'ordinary', ?, 0, 0)
+                """, arguments: [Date()])
+        }
+
+        let store = try ClipStore(dbQueue: dbQueue, retentionCount: 500)
+        let all = try store.fetchAll()
+
+        XCTAssertEqual(all.count, 2, "migration must not lose rows")
+        let kept = all.first { $0.textContent == "kept me" }
+        let ordinary = all.first { $0.textContent == "ordinary" }
+        XCTAssertEqual(kept?.saved, true, "a pinned v1 row becomes a Saved clip")
+        XCTAssertEqual(ordinary?.saved, false)
+        XCTAssertNil(kept?.rtfData)
+        XCTAssertNil(kept?.slotIndex)
+    }
+
+    func testEvictionExemptsSavedClips() throws {
+        let store = try makeStore(retentionCount: 2)
+        let base = Date()
+        _ = try store.insert(Clip(id: nil, type: .text, textContent: "old-saved", imageData: nil, filePath: nil, sourceApp: nil, timestamp: base.addingTimeInterval(-100), saved: true, sortOrder: 0))
+        _ = try store.insert(Clip(id: nil, type: .text, textContent: "old-plain", imageData: nil, filePath: nil, sourceApp: nil, timestamp: base.addingTimeInterval(-50), saved: false, sortOrder: 0))
+        _ = try store.insert(Clip(id: nil, type: .text, textContent: "mid", imageData: nil, filePath: nil, sourceApp: nil, timestamp: base.addingTimeInterval(-10), saved: false, sortOrder: 0))
+        _ = try store.insert(Clip(id: nil, type: .text, textContent: "new", imageData: nil, filePath: nil, sourceApp: nil, timestamp: base, saved: false, sortOrder: 0))
+
+        let all = try store.fetchAll()
+        let texts = Set(all.compactMap { $0.textContent })
+
+        XCTAssertTrue(texts.contains("old-saved"), "Saved clips are never evicted")
+        XCTAssertFalse(texts.contains("old-plain"), "the oldest unsaved clip is evicted past the cap")
+        XCTAssertEqual(all.filter { !$0.saved }.count, 2, "the cap counts unsaved clips only")
+    }
+
+    func testRichAndPlainCopiesOfTheSameTextAreOneClip() throws {
+        // Plain text is a clip's identity: the rich payload must not make a duplicate.
+        let now = Date()
+        let rich = Clip(id: nil, type: .text, textContent: "same words", imageData: nil, filePath: nil, sourceApp: nil, timestamp: now, saved: false, sortOrder: 0, rtfData: Data([0x7B, 0x5C, 0x72, 0x74, 0x66]))
+        let plain = Clip(id: nil, type: .text, textContent: "same words", imageData: nil, filePath: nil, sourceApp: nil, timestamp: now, saved: false, sortOrder: 0)
+
+        XCTAssertTrue(rich.hasSameContent(as: plain))
+        XCTAssertTrue(plain.hasSameContent(as: rich))
+    }
+
+    func testSetSavedTogglesTheFlag() throws {
+        let store = try makeStore()
+        let inserted = try store.insert(Clip(id: nil, type: .text, textContent: "x", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
+        let id = try XCTUnwrap(inserted.id)
+
+        try store.setSaved(true, id: id)
+        XCTAssertEqual(try store.fetchAll().first?.saved, true)
+
+        try store.setSaved(false, id: id)
+        XCTAssertEqual(try store.fetchAll().first?.saved, false)
     }
 }
