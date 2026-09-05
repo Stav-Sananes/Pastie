@@ -203,9 +203,9 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         }
     }
 
-    func togglePin(at row: Int) {
+    func toggleSaved(at row: Int) {
         guard row >= 0, row < filteredClips.count, let id = filteredClips[row].id else { return }
-        try? store.setPinned(!filteredClips[row].pinned, id: id)
+        try? store.setSaved(!filteredClips[row].saved, id: id)
         refresh()
     }
 
@@ -215,17 +215,17 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         refresh()
     }
 
-    // Right-click context menu — the only way to reach togglePin/deleteRow from the UI.
+    // Right-click context menu — the only way to reach toggleSaved/deleteRow from the UI.
     private func buildContextMenu() -> NSMenu {
         let menu = NSMenu()
         menu.delegate = self
-        menu.addItem(withTitle: "Pin", action: #selector(togglePinFromMenu), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Save", action: #selector(toggleSavedFromMenu), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Delete", action: #selector(deleteFromMenu), keyEquivalent: "").target = self
         return menu
     }
 
-    @objc private func togglePinFromMenu() {
-        togglePin(at: tableView.clickedRow)
+    @objc private func toggleSavedFromMenu() {
+        toggleSaved(at: tableView.clickedRow)
     }
 
     @objc private func deleteFromMenu() {
@@ -263,11 +263,11 @@ extension PopupWindowController: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         let row = tableView.clickedRow
         let validRow = row >= 0 && row < filteredClips.count
-        let pinned = validRow && filteredClips[row].pinned
+        let saved = validRow && filteredClips[row].saved
         for item in menu.items {
             item.isEnabled = validRow
-            if item.action == #selector(togglePinFromMenu) {
-                item.title = pinned ? "Unpin" : "Pin"
+            if item.action == #selector(toggleSavedFromMenu) {
+                item.title = saved ? "Unsave" : "Save"
             }
         }
     }
@@ -286,11 +286,11 @@ extension PopupWindowController: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func displayText(for clip: Clip) -> String {
-        let pinPrefix = clip.pinned ? "📌 " : ""
+        let savedPrefix = clip.saved ? "📌 " : ""
         switch clip.type {
-        case .text: return pinPrefix + (clip.textContent ?? "")
-        case .file: return pinPrefix + "📄 " + (clip.filePath ?? "")
-        case .image: return pinPrefix + "🖼 Image (\((clip.imageData?.count ?? 0) / 1024) KB)"
+        case .text: return savedPrefix + (clip.textContent ?? "")
+        case .file: return savedPrefix + "📄 " + (clip.filePath ?? "")
+        case .image: return savedPrefix + "🖼 Image (\((clip.imageData?.count ?? 0) / 1024) KB)"
         }
     }
 }

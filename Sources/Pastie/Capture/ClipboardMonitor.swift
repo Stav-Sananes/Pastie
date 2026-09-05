@@ -96,14 +96,14 @@ final class ClipboardMonitor {
         let now = Date()
         if let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
            let first = fileURLs.first, first.isFileURL {
-            return Clip(id: nil, type: .file, textContent: nil, imageData: nil, filePath: first.path, sourceApp: sourceApp, timestamp: now, pinned: false, sortOrder: 0)
+            return Clip(id: nil, type: .file, textContent: nil, imageData: nil, filePath: first.path, sourceApp: sourceApp, timestamp: now, saved: false, sortOrder: 0)
         }
         if let image = NSImage(pasteboard: pasteboard), let tiff = image.tiffRepresentation {
             let data = downsampleIfNeeded(tiff)
-            return Clip(id: nil, type: .image, textContent: nil, imageData: data, filePath: nil, sourceApp: sourceApp, timestamp: now, pinned: false, sortOrder: 0)
+            return Clip(id: nil, type: .image, textContent: nil, imageData: data, filePath: nil, sourceApp: sourceApp, timestamp: now, saved: false, sortOrder: 0)
         }
         if let text = pasteboard.string(forType: .string), !text.isEmpty {
-            return Clip(id: nil, type: .text, textContent: text, imageData: nil, filePath: nil, sourceApp: sourceApp, timestamp: now, pinned: false, sortOrder: 0)
+            return Clip(id: nil, type: .text, textContent: text, imageData: nil, filePath: nil, sourceApp: sourceApp, timestamp: now, saved: false, sortOrder: 0)
         }
         return nil
     }
