@@ -2,3 +2,7 @@
 .DS_Store
 build/
 .worktrees/
+
+# grill-with-docs artifacts (local only)
+CONTEXT.md
+.superpowers/
