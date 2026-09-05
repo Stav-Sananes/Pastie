@@ -62,4 +62,28 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertEqual(store.hotkeyKeyCode, 1)
         XCTAssertEqual(store.hotkeyModifiers, UInt32(NSEvent.ModifierFlags([.control, .shift]).rawValue))
     }
+
+    func testRichPayloadSettingsWriteThroughToTheStore() {
+        let defaults = UserDefaults(suiteName: "PastieTests.vm.\(UUID().uuidString)")!
+        let store = PreferencesStore(defaults: defaults)
+        let viewModel = PreferencesViewModel(store: store)
+
+        viewModel.rtfCaptureEnabled = false
+        viewModel.rtfSizeCapMB = 4
+
+        XCTAssertFalse(store.rtfCaptureEnabled)
+        XCTAssertEqual(store.rtfSizeCapBytes, 4 * 1_048_576)
+    }
+
+    func testRichPayloadCapIsClampedToASaneRange() {
+        let defaults = UserDefaults(suiteName: "PastieTests.vm.\(UUID().uuidString)")!
+        let store = PreferencesStore(defaults: defaults)
+        let viewModel = PreferencesViewModel(store: store)
+
+        viewModel.rtfSizeCapMB = 0
+        XCTAssertEqual(store.rtfSizeCapBytes, 1_048_576, "0 MB would silently disable rich payloads")
+
+        viewModel.rtfSizeCapMB = 999
+        XCTAssertEqual(store.rtfSizeCapBytes, 25 * 1_048_576, "capped at 25MB")
+    }
 }

@@ -67,6 +67,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let viewModel = PreferencesViewModel(store: preferences, onHotkeyChanged: { [weak self] in
                 self?.hotkeyManager.unregister()
                 self?.hotkeyManager.registerFromPreferences()
+                // The slot modifier lives in the same settings notification, so re-register
+                // the quick-paste hotkeys too or a modifier change won't take effect until relaunch.
+                self?.slotHotkeys.registerBoundSlots()
             })
             let hosting = NSHostingController(rootView: PreferencesView(viewModel: viewModel))
             let window = NSWindow(contentViewController: hosting)
