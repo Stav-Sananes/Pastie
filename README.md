@@ -7,7 +7,7 @@ macOS keeps exactly one thing on the clipboard. Copy something else and the prev
 gone. Pastie keeps a history of what you copied, lets you search it, and pastes any entry
 straight into whatever app you are using.
 
-**Status:** working, version 0.1.0. Built for macOS 13 and later. 49 tests pass.
+**Status:** working, version 0.3.0. Built for macOS 13 and later. 93 tests pass.
 
 ---
 
@@ -31,7 +31,15 @@ straight into whatever app you are using.
 - **Searches as you type.** Filter the history, pick an entry with the arrow keys, press ↵, and
   it is pasted into the app you were in.
 - **Pastes several at once.** Select multiple entries and they are pasted one after another.
-- **Pins what matters.** A pinned entry is never dropped when the history fills up.
+- **Keeps what matters.** A **Saved** clip is never dropped when the history fills up, and sits
+  in its own section above the stream.
+- **Quick-paste slots.** Bind a Saved clip to a slot 1–9 and paste it from anywhere with
+  **⌥⌘1**–**⌥⌘9**, without the panel ever appearing.
+- **Keeps formatting, or drops it.** Styled text is stored with its RTF alongside the plain
+  string: **↵** pastes it styled, **⇧↵** pastes it plain.
+- **Reshapes on the way out.** **⌘T** applies a transform — pretty-print JSON, change case,
+  base64, URL encode/decode, trim — to what you are about to paste. **⌘E** edits it first.
+  Neither touches the stored clip.
 - **Skips what it shouldn't see.** Password managers mark their copies as concealed, and Pastie
   honours that. You can also name apps it should ignore entirely.
 - **Stays out of the way.** No Dock icon, no window, just a menu-bar icon.
@@ -88,7 +96,12 @@ clipboard and tells you to press ⌘V yourself.
 | Move through results | **↑** / **↓** |
 | Paste the selected entry | **↵** |
 | Select several | **⌘-click** or **⇧-click** rows, then **↵** to paste them in order |
-| Pin, or delete, an entry | **Right-click** the row |
+| Paste without formatting | **⇧↵** |
+| Paste the Nth visible row | **⌘1**–**⌘9** |
+| Transform before pasting | **⌘T**, then pick one |
+| Edit before pasting | **⌘E** |
+| Save, assign a slot, or delete an entry | **Right-click** the row |
+| Paste a slot from any app | **⌥⌘1**–**⌥⌘9** (modifier configurable) |
 | Close the panel | **Esc**, or click away |
 | Preferences | Menu-bar icon → Preferences…, or **⌘,** |
 | Empty the history | Menu-bar icon → Clear History |
@@ -96,9 +109,10 @@ clipboard and tells you to press ⌘V yourself.
 Preferences has four tabs:
 
 - **General** — how many entries to keep, launch at login
-- **Hotkey** — record a new hotkey by pressing the combination you want
+- **Hotkey** — record a new hotkey by pressing the combination you want; choose the modifier the
+  quick-paste slots use (⌥⌘, ⌃⌘, or ⇧⌘)
 - **Capture** — turn text, image, or file capture on and off individually; set the maximum image
-  size; manage the list of apps to ignore
+  size; keep or drop formatting, with a size cap for it; manage the list of apps to ignore
 - **Appearance** — how many rows the panel shows
 
 ## What Pastie can see, and where it puts it
@@ -127,11 +141,13 @@ anyone with your unlocked Mac. This is a deliberate trade for a local single-use
 should know it. If you copy a password from an app that does not mark it concealed, that
 password is sitting in that file in plain text until it is evicted.
 
-**What leaves your machine: nothing.** There is no server, no account, no analytics, no crash
-reporting, no network code of any kind in the app. There is nothing to opt out of.
+**What leaves your machine: nothing.** There is no server, no account, no analytics, no hosted
+crash reporting, no network code of any kind in the app. If Pastie crashes it writes a report to
+`~/Library/Application Support/Pastie/Logs` — a local file you can read, reachable from the
+menu-bar icon → Reveal Logs in Finder. Nothing is transmitted. There is nothing to opt out of.
 
-**Clear History keeps your pinned entries.** It deletes unpinned history only. To remove
-everything, unpin first, or delete the database file above and restart.
+**Clear History keeps your Saved clips.** It deletes unsaved history only. To remove everything,
+unsave first, or delete the database file above and restart.
 
 ---
 
@@ -148,7 +164,7 @@ everything, unpin first, or delete the database file above and restart.
 git clone https://github.com/Stav-Sananes/Pastie.git
 cd Pastie
 swift build              # compile
-swift test               # run the suite — 49 tests
+swift test               # run the suite — 93 tests
 ./Scripts/build-app.sh   # produce build/Pastie.app
 open build/Pastie.app
 ```
@@ -176,32 +192,42 @@ Sources/Pastie/
   main.swift                  Entry point: installs AppDelegate, runs the app
   AppDelegate.swift           Wires every component together at launch
   Models/Clip.swift           The Clip record and its content-equality rule
-  Storage/ClipStore.swift     SQLite: migrations, insert, eviction, pin, delete
+  Storage/ClipStore.swift     SQLite: migrations, insert, eviction, saved, slots, delete
   Capture/
     ClipboardMonitor.swift    The polling loop; turns a pasteboard into a Clip
     CaptureFilter.swift       Pure rules for what may be captured
   Search/ClipSearch.swift     Pure substring filtering over clips
+  Transforms/
+    Transform.swift           The protocol and the registry that is also the menu order
+    BuiltInTransforms.swift   Nine pure String -> String? functions
   Paste/PasteEngine.swift     Writes the pasteboard and synthesises ⌘V
   Hotkey/
     HotkeyManager.swift       Registers the global hotkey from preferences
     HotkeyCapture.swift       Turns a key event into a storable binding
     HotkeyFormatter.swift     Renders a binding as "⌥⌘V"
+    SlotHotkeyManager.swift   One global hotkey per *bound* quick-paste slot
   UI/
     MenuBarController.swift   The status item and its menu
-    PopupWindowController.swift  The search panel: list, keys, paste
+    PopupWindowController.swift  The search panel: two sections, keys, paste
+    ClipEditSheet.swift       Edit-before-paste; never writes to the store
     PreferencesView.swift     Tab container
     SettingsTabs/             General, Hotkey, Capture, Appearance
     HotkeyRecorderView.swift  "Press a key combination" control
     PreferencesViewModel.swift
   Preferences/PreferencesStore.swift   UserDefaults-backed settings
-  Support/LaunchAtLogin.swift          SMAppService wrapper
+  Onboarding/OnboardingController.swift  First-run Accessibility explanation
+  Support/
+    LaunchAtLogin.swift       SMAppService wrapper
+    AccessibilityStatus.swift Test seam over AXIsProcessTrusted()
+    CrashLogFormatter.swift   Pure formatting of a crash record
+    CrashLogger.swift         Handler installation and local log writing
 ```
 
 The split is deliberate: **anything with a rule in it is a pure function in its own type**, and
 the AppKit classes are wiring. `CaptureFilter` decides what may be captured but touches no
-pasteboard; `ClipSearch` filters an array; `HotkeyFormatter` formats. That is why 49 tests can
-cover the logic of an app whose interface is untestable — the untestable parts contain no
-decisions.
+pasteboard; `ClipSearch` filters an array; `HotkeyFormatter` formats; a `Transform` is a pure
+function. That is why 93 tests can cover the logic of an app whose interface is untestable — the
+untestable parts contain no decisions.
 
 ## Testing
 
@@ -210,9 +236,12 @@ swift test                                  # everything
 swift test --filter ClipStoreTests          # one suite
 ```
 
-What is covered: storage (insert, eviction, the pin exemption, clearing), capture rules
-(concealed and transient types, excluded apps, per-type toggles), search, hotkey capture and
-formatting, preferences defaults and round-trips, and panel sizing.
+What is covered: storage (insert, eviction, the Saved exemption, the slot API and its
+move-on-conflict rule, migration 2 against a hand-built v1 database), capture rules (concealed and
+transient types, excluded apps, per-type toggles, RTF capture and its size cap), what the paste
+engine writes to a pasteboard for rich and plain, every transform including its failure cases,
+search, hotkey capture and formatting, preferences defaults and round-trips, the onboarding
+decision, crash-log formatting and writing, and panel sizing.
 
 What is not, and cannot easily be: global hotkey registration, synthetic ⌘V into another app,
 and the panel's event handling. These need a real user session and a real frontmost app. They
@@ -279,11 +308,34 @@ twice at different times is two events, and collapsing them would reorder your h
 that surprise you. Copying the same thing twice *in a row* is usually a double ⌘C, which is why
 that one case is filtered.
 
-### Why retention counts unpinned entries only
+### Why retention counts unsaved entries only
 
-The cap is a limit on the stream, not on the library. Pinned entries are excluded from both the
-count and the eviction query, so pinning 600 items with a cap of 500 keeps all 600 — the cap
-governs what flows through, and pinning is how you take something out of the flow.
+The cap is a limit on the stream, not on the library. Saved clips are excluded from both the count
+and the eviction query, so saving 600 items with a cap of 500 keeps all 600 — the cap governs what
+flows through, and saving is how you take something out of the flow.
+
+### Why only bound slots register a global hotkey
+
+Nine permanently registered hotkeys would take ⌥⌘1–9 away from every other app on the machine
+whether or not Pastie had anything to paste with them. `SlotHotkeyManager` registers a hotkey only
+for a slot that actually holds a clip, and re-registers the set whenever a binding changes. The
+clip behind a slot is re-read when the key is pressed, not captured when it is registered, so a
+slot whose clip was deleted beeps instead of pasting something stale.
+
+### Why a transform never writes to the store
+
+History is a record of what you actually copied. A transform and an edit-before-paste produce
+something you never copied, so they are pasted and discarded — the stored clip is untouched. That
+is also why a transform returning nil (malformed JSON, invalid base64) shows a message and pastes
+nothing, rather than pasting an approximation.
+
+### Why only RTF is kept as the rich payload
+
+An `NSPasteboard` item can carry a dozen representations of the same text. Archiving all of them
+would store an unbounded blob per clip, and HTML from a browser drags along styles and sometimes
+remote references. RTF is one self-contained format that every macOS text control understands, so
+it is the only one kept — under a size cap, and never at the cost of the plain string, which
+remains the clip's identity for search and deduplication.
 
 ---
 
@@ -293,10 +345,10 @@ governs what flows through, and pinning is how you take something out of the flo
 | --- | --- | --- |
 | Core clipboard manager (v1) | **Shipped** — capture, popup, search, paste, pin, retention, excluded apps, launch at login | This repo |
 | Menu bar + Settings redesign | **Shipped** — four Settings tabs, hotkey remapping UI, per-type capture toggles, row count | This repo |
-| Saved clips, quick-paste slots, transforms, release polish (v3) | **Planned** — spec and task-level plan written, not started | Local docs, not in this repo |
+| Saved clips, quick-paste slots, transforms, release polish (v3) | **Shipped** — Saved section, slots 1–9 with global hotkeys, rich/plain paste, nine transforms, edit-before-paste, Accessibility onboarding, local crash logs | This repo |
 | Multi-machine LAN sync (v2) | **Planned** — spec and task-level plan written, not started | Local docs, not in this repo |
 
-The design documents for the two planned tracks are deliberately kept out of version control, so
+The design documents for the planned track are deliberately kept out of version control, so
 what you can clone is the software that exists rather than a description of software that does
 not. Nothing above is a promise; it is a record of what has been thought through.
 
