@@ -16,7 +16,6 @@ final class PreferencesViewModel: ObservableObject {
         }
     }
     @Published var excludedBundleIDs: [String]
-    @Published var newBundleID: String = ""
     @Published var captureText: Bool {
         didSet { store.captureText = captureText }
     }
@@ -69,25 +68,35 @@ final class PreferencesViewModel: ObservableObject {
         self.hotkeyDisplay = HotkeyFormatter.displayString(keyCode: store.hotkeyKeyCode, modifiers: store.hotkeyModifiers)
     }
 
-    func addExcluded() {
-        let trimmed = newBundleID.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, !excludedBundleIDs.contains(trimmed) else {
-            newBundleID = ""
-            return
+    /// The excluded apps as something a list can render: name and icon where the app is
+    /// installed, the identifier itself where it is not.
+    var excludedApps: [InstalledApp] {
+        excludedBundleIDs.map { InstalledApp.resolve($0) }
+    }
+
+    /// Adds everything the picker returned. Blanks and identifiers already on the list are
+    /// ignored, so picking the same app twice is a no-op rather than a duplicate row.
+    func addExcluded(bundleIDs: [String]) {
+        for bundleID in bundleIDs {
+            let trimmed = bundleID.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !excludedBundleIDs.contains(trimmed) else { continue }
+            excludedBundleIDs.append(trimmed)
         }
-        excludedBundleIDs.append(trimmed)
         excludedBundleIDs.sort()
         store.excludedBundleIDs = Set(excludedBundleIDs)
-        newBundleID = ""
     }
 
     func removeExcluded(at offsets: IndexSet) {
-        for index in offsets {
-            store.excludedBundleIDs.remove(excludedBundleIDs[index])
-        }
-        for index in offsets.sorted(by: >) {
-            excludedBundleIDs.remove(at: index)
-        }
+        removeExcluded(bundleIDs: offsets.map { excludedBundleIDs[$0] })
+    }
+
+    /// Removes by identifier rather than by index: the list hands back a selection, and an index
+    /// computed against a differently sorted array would delete the wrong row.
+    func removeExcluded(bundleIDs: [String]) {
+        let doomed = Set(bundleIDs)
+        guard !doomed.isEmpty else { return }
+        excludedBundleIDs.removeAll { doomed.contains($0) }
+        store.excludedBundleIDs = Set(excludedBundleIDs)
     }
 
     func updateHotkey(keyCode: UInt32, modifiers: UInt32) {
