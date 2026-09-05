@@ -37,6 +37,10 @@ final class MenuBarController: NSObject {
         clearItem.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
         clearItem.target = self
 
+        let logsItem = NSMenuItem(title: "Reveal Logs in Finder", action: #selector(revealLogs), keyEquivalent: "")
+        logsItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        logsItem.target = self
+
         let quitItem = NSMenuItem(title: "Quit Pastie", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
 
@@ -46,6 +50,7 @@ final class MenuBarController: NSObject {
         menu.addItem(.separator())
         menu.addItem(preferencesItem)
         menu.addItem(clearItem)
+        menu.addItem(logsItem)
         menu.addItem(.separator())
         menu.addItem(quitItem)
         statusItem.menu = menu
@@ -61,6 +66,13 @@ final class MenuBarController: NSObject {
 
     @objc private func clearHistory() {
         try? clipStore.clearAll()
+    }
+
+    @objc private func revealLogs() {
+        let directory = CrashLogger.logDirectory
+        // Revealing a folder that doesn't exist yet opens nothing and looks broken.
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: directory.path)
     }
 
     @objc private func quit() {
