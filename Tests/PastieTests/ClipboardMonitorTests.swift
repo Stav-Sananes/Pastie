@@ -171,4 +171,57 @@ final class ClipboardMonitorTests: XCTestCase {
 
         XCTAssertNil(clip?.rtfData)
     }
+
+    func testTextWinsWhenTheSourceDeclaresItFirst() {
+        // Terminal and other text apps put a small placeholder image on the pasteboard beside the
+        // string. Declaring the string first is the source saying which one it means.
+        let defaults = UserDefaults(suiteName: "PastieTests.precedence.\(UUID().uuidString)")!
+        let monitor = makeMonitor(defaults: defaults)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("PastieTests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.declareTypes([.string, .tiff], owner: nil)
+        pasteboard.setString("the words I copied", forType: .string)
+        pasteboard.setData(tinyTIFF(), forType: .tiff)
+
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+
+        XCTAssertEqual(clip?.type, .text, "a text copy must not become a 4x4 pixel image")
+        XCTAssertEqual(clip?.textContent, "the words I copied")
+    }
+
+    func testImageWinsWhenTheSourceDeclaresItFirst() {
+        // Copying an actual image: the image type leads, and any string beside it is incidental.
+        let defaults = UserDefaults(suiteName: "PastieTests.precedence.\(UUID().uuidString)")!
+        let monitor = makeMonitor(defaults: defaults)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("PastieTests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.declareTypes([.tiff, .string], owner: nil)
+        pasteboard.setData(tinyTIFF(), forType: .tiff)
+        pasteboard.setString("https://example.com/cat.png", forType: .string)
+
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+
+        XCTAssertEqual(clip?.type, .image)
+    }
+
+    func testImageOnlyPasteboardIsStillAnImage() {
+        let defaults = UserDefaults(suiteName: "PastieTests.precedence.\(UUID().uuidString)")!
+        let monitor = makeMonitor(defaults: defaults)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("PastieTests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.declareTypes([.tiff], owner: nil)
+        pasteboard.setData(tinyTIFF(), forType: .tiff)
+
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+
+        XCTAssertEqual(clip?.type, .image)
+    }
+
+    private func tinyTIFF() -> Data {
+        let image = NSImage(size: NSSize(width: 4, height: 4))
+        image.lockFocus()
+        NSColor.red.drawSwatch(in: NSRect(x: 0, y: 0, width: 4, height: 4))
+        image.unlockFocus()
+        return image.tiffRepresentation!
+    }
 }
