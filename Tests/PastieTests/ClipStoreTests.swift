@@ -181,4 +181,88 @@ extension ClipStoreTests {
         try store.setSaved(false, id: id)
         XCTAssertEqual(try store.fetchAll().first?.saved, false)
     }
+
+    private func insertText(_ store: ClipStore, _ text: String, saved: Bool = false, at date: Date = Date()) throws -> Int64 {
+        let clip = try store.insert(Clip(id: nil, type: .text, textContent: text, imageData: nil, filePath: nil, sourceApp: nil, timestamp: date, saved: saved, sortOrder: 0))
+        return try XCTUnwrap(clip.id)
+    }
+
+    func testAssignSlotBindsAndFetchesBack() throws {
+        let store = try makeStore()
+        let id = try insertText(store, "hello", saved: true)
+
+        try store.assignSlot(3, id: id)
+
+        let found = try store.clipForSlot(3)
+        XCTAssertEqual(found?.textContent, "hello")
+        XCTAssertEqual(found?.slotIndex, 3)
+    }
+
+    func testAssigningAnOccupiedSlotMovesIt() throws {
+        let store = try makeStore()
+        let first = try insertText(store, "first", saved: true)
+        let second = try insertText(store, "second", saved: true)
+
+        try store.assignSlot(1, id: first)
+        try store.assignSlot(1, id: second)
+
+        XCTAssertEqual(try store.clipForSlot(1)?.textContent, "second")
+        let firstClip = try store.fetchAll().first { $0.id == first }
+        XCTAssertNil(firstClip?.slotIndex, "the previous holder is unbound, not duplicated")
+    }
+
+    func testAssigningASlotSavesTheClip() throws {
+        let store = try makeStore()
+        let id = try insertText(store, "not yet saved", saved: false)
+
+        try store.assignSlot(5, id: id)
+
+        let clip = try store.fetchAll().first { $0.id == id }
+        XCTAssertEqual(clip?.saved, true, "a slot implies the clip is kept")
+    }
+
+    func testAssignNilClearsTheSlotButKeepsTheClipSaved() throws {
+        let store = try makeStore()
+        let id = try insertText(store, "bound", saved: true)
+        try store.assignSlot(7, id: id)
+
+        try store.assignSlot(nil, id: id)
+
+        XCTAssertNil(try store.clipForSlot(7))
+        XCTAssertEqual(try store.fetchAll().first?.saved, true)
+    }
+
+    func testDeletingASlotBoundClipFreesTheSlot() throws {
+        let store = try makeStore()
+        let id = try insertText(store, "doomed", saved: true)
+        try store.assignSlot(2, id: id)
+
+        try store.delete(id: id)
+
+        XCTAssertNil(try store.clipForSlot(2))
+    }
+
+    func testSavedListsSlotBoundClipsFirstInSlotOrder() throws {
+        let store = try makeStore()
+        let base = Date()
+        let a = try insertText(store, "a", saved: true, at: base.addingTimeInterval(-30))
+        let b = try insertText(store, "b", saved: true, at: base.addingTimeInterval(-20))
+        _ = try insertText(store, "c", saved: true, at: base.addingTimeInterval(-10))
+        try store.assignSlot(2, id: a)
+        try store.assignSlot(1, id: b)
+
+        let saved = try store.saved()
+
+        XCTAssertEqual(saved.compactMap { $0.textContent }, ["b", "a", "c"])
+    }
+
+    func testHistoryExcludesSavedClips() throws {
+        let store = try makeStore()
+        _ = try insertText(store, "kept", saved: true)
+        _ = try insertText(store, "passing", saved: false)
+
+        let history = try store.history()
+
+        XCTAssertEqual(history.compactMap { $0.textContent }, ["passing"])
+    }
 }

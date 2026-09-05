@@ -84,6 +84,55 @@ final class ClipStore {
         }
     }
 
+    /// Valid quick-paste slots. Slot numbers outside this range are ignored.
+    static let slotRange = 1...9
+
+    /// Binds `id` to `slot`, or unbinds it when `slot` is nil. If another clip already holds the
+    /// slot, that clip is unbound first — assigning an occupied slot moves it. A clip given a slot
+    /// is saved in the same write, because a slot only means anything on a Saved clip.
+    func assignSlot(_ slot: Int?, id: Int64) throws {
+        if let slot, !Self.slotRange.contains(slot) {
+            NSLog("ClipStore: ignoring out-of-range slot \(slot)")
+            return
+        }
+        try dbQueue.write { db in
+            if let slot {
+                if var previous = try Clip.filter(Column("slotIndex") == slot).fetchOne(db), previous.id != id {
+                    previous.slotIndex = nil
+                    try previous.update(db)
+                }
+            }
+            guard var clip = try Clip.fetchOne(db, key: id) else { return }
+            clip.slotIndex = slot
+            if slot != nil { clip.saved = true }
+            try clip.update(db)
+        }
+    }
+
+    func clipForSlot(_ slot: Int) throws -> Clip? {
+        try dbQueue.read { db in
+            try Clip.filter(Column("slotIndex") == slot).fetchOne(db)
+        }
+    }
+
+    /// Saved clips for the popup's Saved section: slot-bound clips first in slot order, then the
+    /// unbound ones newest-first.
+    func saved() throws -> [Clip] {
+        try dbQueue.read { db in
+            let all = try Clip.filter(Column("saved") == true).fetchAll(db)
+            let bound = all.filter { $0.slotIndex != nil }.sorted { ($0.slotIndex ?? 0) < ($1.slotIndex ?? 0) }
+            let unbound = all.filter { $0.slotIndex == nil }.sorted { $0.timestamp > $1.timestamp }
+            return bound + unbound
+        }
+    }
+
+    /// The evicting stream: everything the user has not kept, newest first.
+    func history() throws -> [Clip] {
+        try dbQueue.read { db in
+            try Clip.filter(Column("saved") == false).order(Column("timestamp").desc).fetchAll(db)
+        }
+    }
+
     func delete(id: Int64) throws {
         try dbQueue.write { db in
             _ = try Clip.deleteOne(db, key: id)
