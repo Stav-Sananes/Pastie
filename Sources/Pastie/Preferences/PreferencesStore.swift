@@ -15,6 +15,9 @@ final class PreferencesStore {
         static let captureFiles = "captureFiles"
         static let maxImageSizeMB = "maxImageSizeMB"
         static let popupRowCount = "popupRowCount"
+        static let rtfCaptureEnabled = "rtfCaptureEnabled"
+        static let rtfSizeCapBytes = "rtfSizeCapBytes"
+        static let slotHotkeyModifiers = "slotHotkeyModifiers"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -24,6 +27,18 @@ final class PreferencesStore {
     var excludedBundleIDs: Set<String> {
         get { Set(defaults.stringArray(forKey: Keys.excludedBundleIDs) ?? []) }
         set { defaults.set(Array(newValue), forKey: Keys.excludedBundleIDs) }
+    }
+
+    /// Keep the formatted (RTF) representation of copied text. See ADR 0002.
+    var rtfCaptureEnabled: Bool {
+        get { defaults.object(forKey: Keys.rtfCaptureEnabled) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.rtfCaptureEnabled) }
+    }
+
+    /// Rich payloads larger than this are dropped; the clip keeps its plain text.
+    var rtfSizeCapBytes: Int {
+        get { defaults.object(forKey: Keys.rtfSizeCapBytes) as? Int ?? 1_048_576 }
+        set { defaults.set(newValue, forKey: Keys.rtfSizeCapBytes) }
     }
 
     var retentionCount: Int {
@@ -42,6 +57,15 @@ final class PreferencesStore {
                 ?? UInt32(NSEvent.ModifierFlags([.option, .command]).rawValue)
         }
         set { defaults.set(newValue, forKey: Keys.hotkeyModifiers) }
+    }
+
+    /// Modifier combination for the global quick-paste hotkeys, applied to digits 1–9.
+    var slotHotkeyModifiers: UInt32 {
+        get {
+            defaults.object(forKey: Keys.slotHotkeyModifiers) as? UInt32
+                ?? UInt32(NSEvent.ModifierFlags([.option, .command]).rawValue)
+        }
+        set { defaults.set(newValue, forKey: Keys.slotHotkeyModifiers) }
     }
 
     var launchAtLogin: Bool {

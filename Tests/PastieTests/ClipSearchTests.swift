@@ -4,7 +4,7 @@ import XCTest
 
 final class ClipSearchTests: XCTestCase {
     private func clip(_ text: String) -> Clip {
-        Clip(id: nil, type: .text, textContent: text, imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0)
+        Clip(id: nil, type: .text, textContent: text, imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0)
     }
 
     func testEmptyQueryReturnsAll() {
@@ -20,12 +20,12 @@ final class ClipSearchTests: XCTestCase {
     }
 
     func testQueryMatchesFilePath() {
-        let fileClip = Clip(id: nil, type: .file, textContent: nil, imageData: nil, filePath: "/Users/me/report.pdf", sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0)
+        let fileClip = Clip(id: nil, type: .file, textContent: nil, imageData: nil, filePath: "/Users/me/report.pdf", sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0)
         XCTAssertEqual(ClipSearch.filter([fileClip], query: "report").count, 1)
     }
 
     func testQueryExcludesImageClips() {
-        let imageClip = Clip(id: nil, type: .image, textContent: nil, imageData: Data([0x01]), filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0)
+        let imageClip = Clip(id: nil, type: .image, textContent: nil, imageData: Data([0x01]), filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0)
         XCTAssertEqual(ClipSearch.filter([imageClip], query: "anything").count, 0)
     }
 }
