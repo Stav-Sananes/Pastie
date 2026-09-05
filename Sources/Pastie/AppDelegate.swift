@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboarding: OnboardingController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        CrashLogger.install()
         preferences = PreferencesStore()
 
         let dbQueue: DatabaseQueue
