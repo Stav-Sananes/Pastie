@@ -18,4 +18,16 @@ enum CaptureFilter {
         }
         return true
     }
+
+    /// Gates a clip by its type against the user's per-type capture toggles. Checked
+    /// AFTER shouldCapture() and after the clip is built — shouldCapture() covers
+    /// privacy signals (concealed/transient, excluded app) that must block reading
+    /// pasteboard content at all; this only decides whether to store what was read.
+    static func isTypeEnabled(_ type: ClipType, captureText: Bool, captureImages: Bool, captureFiles: Bool) -> Bool {
+        switch type {
+        case .text: return captureText
+        case .image: return captureImages
+        case .file: return captureFiles
+        }
+    }
 }

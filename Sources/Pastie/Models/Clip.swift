@@ -17,8 +17,16 @@ struct Clip: Identifiable, Equatable, Codable {
     var filePath: String?
     var sourceApp: String?
     var timestamp: Date
-    var pinned: Bool
+    /// Kept deliberately by the user: exempt from retention eviction, shown in the popup's
+    /// Saved section, and the only kind of Clip that may hold a quick-paste slot.
+    /// Renamed from v1's `pinned` — see docs/adr/0003-saved-replaces-pinned.md.
+    var saved: Bool
     var sortOrder: Int64
+    /// public.rtf bytes captured alongside `textContent`, when the source offered them and they
+    /// fit under the configured cap. See docs/adr/0002-store-rtf-only-as-rich-payload.md.
+    var rtfData: Data? = nil
+    /// Quick-paste slot 1–9, or nil. Only Saved clips hold one; unique across the table.
+    var slotIndex: Int? = nil
     /// Device ID this clip arrived from; nil for locally-captured clips.
     /// Non-nil is the loop-prevention guard: such clips are never re-broadcast.
     var originDevice: String? = nil

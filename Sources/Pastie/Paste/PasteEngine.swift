@@ -13,31 +13,39 @@ final class PasteEngine {
     /// `beforeEachWrite` is invoked immediately before each pasteboard write (once per clip) so
     /// a caller holding a ClipboardMonitor can tell it to ignore the resulting pasteboard change
     /// (see ClipboardMonitor.ignoreNextChange) and avoid re-capturing our own paste as a new clip.
+    ///
+    /// `plain` drops the rich payload, which is what ⇧↵ in the popup asks for.
     @discardableResult
-    func paste(_ clips: [Clip], beforeEachWrite: (() -> Void)? = nil) -> Bool {
+    func paste(_ clips: [Clip], plain: Bool = false, beforeEachWrite: (() -> Void)? = nil) -> Bool {
         guard let first = clips.first else { return true }
         beforeEachWrite?()
-        writeToPasteboard(first)
+        writeToPasteboard(first, plain: plain, pasteboard: .general)
         guard AXIsProcessTrusted() else { return false }
         simulatePasteKeystroke()
         Thread.sleep(forTimeInterval: 0.05)
         for clip in clips.dropFirst() {
             beforeEachWrite?()
-            writeToPasteboard(clip)
+            writeToPasteboard(clip, plain: plain, pasteboard: .general)
             simulatePasteKeystroke()
             Thread.sleep(forTimeInterval: 0.05)
         }
         return true
     }
 
-    private func writeToPasteboard(_ clip: Clip) {
-        let pasteboard = NSPasteboard.general
+    /// Internal rather than private so tests can drive it against a named pasteboard instead of
+    /// the system one; the keystroke half of paste() has no testable seam.
+    func writeToPasteboard(_ clip: Clip, plain: Bool, pasteboard: NSPasteboard) {
         pasteboard.clearContents()
         switch clip.type {
         case .text:
-            if let text = clip.textContent {
-                pasteboard.setString(text, forType: .string)
+            guard let text = clip.textContent else { return }
+            if !plain, let rtf = clip.rtfData {
+                // Declare RTF first: the destination takes the richest type it understands, and
+                // an app that only reads plain text still finds the string below.
+                pasteboard.declareTypes([.rtf, .string], owner: nil)
+                pasteboard.setData(rtf, forType: .rtf)
             }
+            pasteboard.setString(text, forType: .string)
         case .image:
             if let data = clip.imageData, let image = NSImage(data: data) {
                 pasteboard.writeObjects([image])

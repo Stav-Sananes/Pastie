@@ -52,7 +52,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let b = FakeTransport(peerID: "b", peerName: "B")
         let (coordinator, _) = try makeCoordinator(transports: [a, b])
 
-        coordinator.handleLocalClip(Clip(id: 1, uuid: "clip-1", type: .text, textContent: "shared", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+        coordinator.handleLocalClip(Clip(id: 1, uuid: "clip-1", type: .text, textContent: "shared", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
 
         XCTAssertEqual(a.sent.count, 1)
         XCTAssertEqual(b.sent.count, 1)
@@ -67,7 +67,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let (coordinator, _) = try makeCoordinator(transports: [peer])
 
         // A clip that arrived from another machine: originDevice is set.
-        coordinator.handleLocalClip(Clip(id: 1, uuid: "clip-2", type: .text, textContent: "echo", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0, originDevice: "other-device"))
+        coordinator.handleLocalClip(Clip(id: 1, uuid: "clip-2", type: .text, textContent: "echo", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0, originDevice: "other-device"))
 
         XCTAssertTrue(peer.sent.isEmpty, "re-broadcasting a received clip would loop forever")
     }
@@ -145,7 +145,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let bigFile = tempDir.appendingPathComponent("big.bin")
         try Data(repeating: 0x01, count: 11).write(to: bigFile)
 
-        coordinator.handleLocalClip(Clip(id: 1, uuid: "big", type: .file, textContent: nil, imageData: nil, filePath: bigFile.path, sourceApp: nil, timestamp: Date(), pinned: false, sortOrder: 0))
+        coordinator.handleLocalClip(Clip(id: 1, uuid: "big", type: .file, textContent: nil, imageData: nil, filePath: bigFile.path, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
 
         XCTAssertTrue(peer.sent.isEmpty, "files over the ceiling are not synced")
     }

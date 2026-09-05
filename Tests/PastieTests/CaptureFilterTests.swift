@@ -21,4 +21,19 @@ final class CaptureFilterTests: XCTestCase {
         let context = CaptureContext(pasteboardTypes: ["public.utf8-plain-text"], frontmostBundleID: "com.1password.1password")
         XCTAssertFalse(CaptureFilter.shouldCapture(context: context, excludedBundleIDs: ["com.1password.1password"]))
     }
+
+    func testIsTypeEnabledRespectsTextToggle() {
+        XCTAssertTrue(CaptureFilter.isTypeEnabled(.text, captureText: true, captureImages: false, captureFiles: false))
+        XCTAssertFalse(CaptureFilter.isTypeEnabled(.text, captureText: false, captureImages: true, captureFiles: true))
+    }
+
+    func testIsTypeEnabledRespectsImageToggle() {
+        XCTAssertTrue(CaptureFilter.isTypeEnabled(.image, captureText: false, captureImages: true, captureFiles: false))
+        XCTAssertFalse(CaptureFilter.isTypeEnabled(.image, captureText: true, captureImages: false, captureFiles: true))
+    }
+
+    func testIsTypeEnabledRespectsFileToggle() {
+        XCTAssertTrue(CaptureFilter.isTypeEnabled(.file, captureText: false, captureImages: false, captureFiles: true))
+        XCTAssertFalse(CaptureFilter.isTypeEnabled(.file, captureText: true, captureImages: true, captureFiles: false))
+    }
 }

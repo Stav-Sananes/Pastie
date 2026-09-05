@@ -10,9 +10,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: HotkeyManager!
     private var menuBarController: MenuBarController!
     private var popupController: PopupWindowController!
+    private var slotHotkeys: SlotHotkeyManager!
     private var preferencesWindow: NSWindow?
+    private var onboarding: OnboardingController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        CrashLogger.install()
         preferences = PreferencesStore()
 
         let dbQueue: DatabaseQueue
@@ -27,11 +30,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        popupController = PopupWindowController(store: clipStore, pasteEngine: PasteEngine())
+        popupController = PopupWindowController(store: clipStore, pasteEngine: PasteEngine(), preferences: preferences)
 
         menuBarController = MenuBarController(
             popupController: popupController,
             clipStore: clipStore,
+            preferences: preferences,
             onOpenPreferences: { [weak self] in self?.openPreferences() }
         )
 
@@ -44,12 +48,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotkeyManager.registerFromPreferences()
 
-        requestAccessibilityIfNeeded()
+        slotHotkeys = SlotHotkeyManager(store: clipStore, preferences: preferences) { [weak self] clip in
+            guard let self else { return }
+            // Paste straight into the frontmost app: a slot hotkey never shows the popup.
+            let pasted = PasteEngine().paste([clip], beforeEachWrite: { [weak self] in
+                self?.monitor.ignoreNextChange()
+            })
+            if !pasted { NSSound.beep() }
+        }
+        slotHotkeys.registerBoundSlots()
+        popupController.onSlotsChanged = { [weak self] in
+            self?.slotHotkeys.registerBoundSlots()
+        }
+
+        onboarding = OnboardingController()
+        onboarding.presentIfNeeded()
     }
 
     private func openPreferences() {
         if preferencesWindow == nil {
-            let viewModel = PreferencesViewModel(store: preferences)
+            let viewModel = PreferencesViewModel(store: preferences, onHotkeyChanged: { [weak self] in
+                self?.hotkeyManager.unregister()
+                self?.hotkeyManager.registerFromPreferences()
+                // The slot modifier lives in the same settings notification, so re-register
+                // the quick-paste hotkeys too or a modifier change won't take effect until relaunch.
+                self?.slotHotkeys.registerBoundSlots()
+            })
             let hosting = NSHostingController(rootView: PreferencesView(viewModel: viewModel))
             let window = NSWindow(contentViewController: hosting)
             window.title = "Pastie Preferences"
@@ -59,12 +83,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         preferencesWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-    }
-
-    private func requestAccessibilityIfNeeded() {
-        guard !AXIsProcessTrusted() else { return }
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
     }
 
     private static func databasePath() -> String {
