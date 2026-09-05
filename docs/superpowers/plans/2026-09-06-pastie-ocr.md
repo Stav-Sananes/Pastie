@@ -62,7 +62,7 @@ Task order is dependency order: schema (1) → search (2) → the recogniser sea
 - Consumes: nothing (first task).
 - Produces: `Clip.ocrText: String?` (default `nil`), and `ClipStore.setOCRText(_ text: String?, id: Int64) throws`.
 
-**Context you need:** `Clip` already carries four defaulted trailing properties — `rtfData`, `slotIndex`, `originDevice` — added by earlier work in exactly this way. Adding a fifth defaulted property at the end means none of the dozen `Clip(...)` call sites change. GRDB's `DatabaseMigrator` records each migration by its string identifier in `grdb_migrations` and replays them in registration order, so `addOCRText` must be registered after `addSyncColumns`, not before.
+**Context you need:** `Clip` already carries three defaulted trailing properties — `rtfData`, `slotIndex`, `originDevice` — added by earlier work in exactly this way. Adding a fourth defaulted property at the end means none of the dozen `Clip(...)` call sites change. GRDB's `DatabaseMigrator` records each migration by its string identifier in `grdb_migrations` and replays them in registration order, so `addOCRText` must be registered after `addSyncColumns`, not before.
 
 `ClipStore.setOCRText` must tolerate a missing row: recognition finishes after capture, and by then the clip may have been evicted by the retention cap or deleted by the user. A `fetchOne` that returns nil is the normal case, not an error.
 
