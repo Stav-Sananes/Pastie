@@ -39,6 +39,14 @@ final class SyncService {
     private var transports: [String: NWConnectionTransport] = [:]
     private var _peers: [SyncPeerStatus] = []
 
+    /// Set by `stop()`, cleared by `start()`. `NWConnectionTransport.close()` hops onto
+    /// `queue` asynchronously (see PeerTransport.swift), so a transport `stop()` just closed
+    /// can still deliver its `onClose` — and thus reach `removeTransport`/`updatePeer` — after
+    /// `stop()` has already reported an empty peer list. `updatePeer` consults this flag so
+    /// that late-arriving event can't resurrect a peer once we've told listeners the list is
+    /// empty; a subsequent `start()` un-suppresses it for the new session.
+    private var isStopped = false
+
     /// Peer IDs whose most recent connection attempt failed the TLS-PSK handshake.
     /// Consulted and cleared by `removeTransport` so a wrong-passphrase failure isn't
     /// overwritten by the plain `disconnected` that follows from tearing the
@@ -105,6 +113,10 @@ final class SyncService {
     // MARK: - Lifecycle
 
     func start() throws {
+        lock.lock()
+        isStopped = false
+        lock.unlock()
+
         let parameters = makeParameters()
 
         let listener = try NWListener(using: parameters, on: requestedPort)
@@ -136,6 +148,7 @@ final class SyncService {
         browser = nil
 
         lock.lock()
+        isStopped = true
         let closingTransports = Array(transports.values)
         transports.removeAll()
         _peers = []
@@ -221,8 +234,16 @@ final class SyncService {
         updatePeer(SyncPeerStatus(id: peerID, name: name, state: state))
     }
 
+    /// The single place `_peers` is mutated and `onPeersChanged` is scheduled. Guarded by
+    /// `isStopped` so a connection event that was already in flight when `stop()` ran (a
+    /// `.ready` completing late, or `close()`'s asynchronous `onClose` arriving via
+    /// `removeTransport`) can't re-populate `_peers` after `stop()` reported it empty.
     private func updatePeer(_ status: SyncPeerStatus) {
         lock.lock()
+        guard !isStopped else {
+            lock.unlock()
+            return
+        }
         if let index = _peers.firstIndex(where: { $0.id == status.id }) {
             _peers[index] = status
         } else {
