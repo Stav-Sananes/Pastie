@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var popupController: PopupWindowController!
     private var slotHotkeys: SlotHotkeyManager!
     private var preferencesWindow: NSWindow?
+    private var onboarding: OnboardingController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         preferences = PreferencesStore()
@@ -59,7 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.slotHotkeys.registerBoundSlots()
         }
 
-        requestAccessibilityIfNeeded()
+        onboarding = OnboardingController()
+        onboarding.presentIfNeeded()
     }
 
     private func openPreferences() {
@@ -80,12 +82,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         preferencesWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-    }
-
-    private func requestAccessibilityIfNeeded() {
-        guard !AXIsProcessTrusted() else { return }
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
     }
 
     private static func databasePath() -> String {
