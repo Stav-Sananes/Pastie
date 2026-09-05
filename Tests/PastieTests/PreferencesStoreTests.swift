@@ -67,4 +67,23 @@ final class PreferencesStoreTests: XCTestCase {
         store.popupRowCount = 12
         XCTAssertEqual(store.popupRowCount, 12)
     }
+
+    func testRichPayloadDefaults() {
+        let defaults = UserDefaults(suiteName: "PastieTests.rtf.\(UUID().uuidString)")!
+        let store = PreferencesStore(defaults: defaults)
+
+        XCTAssertTrue(store.rtfCaptureEnabled, "keeping formatting is on by default")
+        XCTAssertEqual(store.rtfSizeCapBytes, 1_048_576)
+    }
+
+    func testRichPayloadSettingsRoundTrip() {
+        let defaults = UserDefaults(suiteName: "PastieTests.rtf.\(UUID().uuidString)")!
+        let store = PreferencesStore(defaults: defaults)
+
+        store.rtfCaptureEnabled = false
+        store.rtfSizeCapBytes = 4096
+
+        XCTAssertFalse(store.rtfCaptureEnabled)
+        XCTAssertEqual(store.rtfSizeCapBytes, 4096)
+    }
 }
