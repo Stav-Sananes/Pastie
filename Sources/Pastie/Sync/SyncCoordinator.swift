@@ -42,6 +42,13 @@ final class SyncCoordinator {
 
         do {
             let payload = try message.encoded()
+            // The wire framing itself rejects anything over this ceiling by tearing the
+            // connection down (FrameDecoder.messageTooLarge) — catch it here instead so one
+            // oversize clip (of any type, not just .file) can't take out a peer link.
+            guard payload.count <= MessageFraming.maxMessageBytes else {
+                NSLog("SyncCoordinator: encoded clip \(clip.uuid) is \(payload.count) bytes, over the \(MessageFraming.maxMessageBytes) framing ceiling — not synced")
+                return
+            }
             for transport in transportsProvider() {
                 transport.send(payload)
             }
