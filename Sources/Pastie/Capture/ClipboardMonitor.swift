@@ -92,20 +92,33 @@ final class ClipboardMonitor {
         return nil
     }
 
-    private func makeClip(from pasteboard: NSPasteboard, sourceApp: String?) -> Clip? {
+    func makeClip(from pasteboard: NSPasteboard, sourceApp: String?) -> Clip? {
         let now = Date()
         if let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
            let first = fileURLs.first, first.isFileURL {
-            return Clip(id: nil, type: .file, textContent: nil, imageData: nil, filePath: first.path, sourceApp: sourceApp, timestamp: now, pinned: false, sortOrder: 0)
+            return Clip(id: nil, type: .file, textContent: nil, imageData: nil, filePath: first.path, sourceApp: sourceApp, timestamp: now, saved: false, sortOrder: 0)
         }
         if let image = NSImage(pasteboard: pasteboard), let tiff = image.tiffRepresentation {
             let data = downsampleIfNeeded(tiff)
-            return Clip(id: nil, type: .image, textContent: nil, imageData: data, filePath: nil, sourceApp: sourceApp, timestamp: now, pinned: false, sortOrder: 0)
+            return Clip(id: nil, type: .image, textContent: nil, imageData: data, filePath: nil, sourceApp: sourceApp, timestamp: now, saved: false, sortOrder: 0)
         }
         if let text = pasteboard.string(forType: .string), !text.isEmpty {
-            return Clip(id: nil, type: .text, textContent: text, imageData: nil, filePath: nil, sourceApp: sourceApp, timestamp: now, pinned: false, sortOrder: 0)
+            return Clip(id: nil, type: .text, textContent: text, imageData: nil, filePath: nil, sourceApp: sourceApp, timestamp: now, saved: false, sortOrder: 0, rtfData: richPayload(from: pasteboard))
         }
         return nil
+    }
+
+    /// The formatted representation to keep beside a text clip's plain string, or nil when the
+    /// source offered none, the user turned it off, or it exceeds the cap. RTF only — never HTML,
+    /// never the whole pasteboard item (ADR 0002).
+    private func richPayload(from pasteboard: NSPasteboard) -> Data? {
+        guard preferences.rtfCaptureEnabled else { return nil }
+        guard let rtf = pasteboard.data(forType: .rtf) else { return nil }
+        guard rtf.count <= preferences.rtfSizeCapBytes else {
+            NSLog("ClipboardMonitor: dropping \(rtf.count)-byte RTF payload over the \(preferences.rtfSizeCapBytes)-byte cap")
+            return nil
+        }
+        return rtf
     }
 
     private func downsampleIfNeeded(_ data: Data) -> Data {

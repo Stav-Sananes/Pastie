@@ -14,6 +14,16 @@ struct HotkeyTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Section("Quick-Paste Slots") {
+                Picker("Slot modifier", selection: $viewModel.slotHotkeyModifierChoice) {
+                    Text("⌥⌘").tag(SlotModifierChoice.optionCommand)
+                    Text("⌃⌘").tag(SlotModifierChoice.controlCommand)
+                    Text("⇧⌘").tag(SlotModifierChoice.shiftCommand)
+                }
+                Text("Press the modifier with 1–9 to paste a slot without opening Pastie.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding()
     }
