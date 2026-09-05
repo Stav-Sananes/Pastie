@@ -2,13 +2,20 @@
 import AppKit
 
 final class PopupWindowController: NSObject, NSWindowDelegate {
-    /// Non-list chrome (search field + margins) in buildPanel()'s base layout — total
-    /// panel height minus the space given to the row list.
-    static let chromeHeight: CGFloat = 56
+    /// Non-list chrome (search field + hint row + margins) in buildPanel()'s base layout —
+    /// total panel height minus the space given to the row list.
+    static let chromeHeight: CGFloat = 72
     static let rowHeight: CGFloat = 24
 
     static func panelHeight(forRows rows: Int) -> CGFloat {
         chromeHeight + CGFloat(max(1, rows)) * rowHeight
+    }
+
+    /// One line in the popup's table: either a section title or a Clip. Headers are drawn but
+    /// never selected — see tableView(_:shouldSelectRow:) and moveSelection(by:).
+    enum Row {
+        case header(String)
+        case clip(Clip)
     }
 
     private let store: ClipStore
@@ -18,9 +25,10 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     private var searchField: NSSearchField!
     private var tableView: NSTableView!
     private var scrollView: NSScrollView!
-    private var allClips: [Clip] = []
-    private var filteredClips: [Clip] = []
-    /// The app that was frontmost right before Pastie activated itself, so pasteSelection()
+    private var rows: [Row] = []
+    private var savedClips: [Clip] = []
+    private var historyClips: [Clip] = []
+    /// The app that was frontmost right before Pastie activated itself, so paste(_:plain:)
     /// can hand focus back to it before simulating ⌘V.
     private var previousApp: NSRunningApplication?
     /// Local key-down monitor active while the panel is visible, so Return/Escape work
@@ -29,6 +37,9 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     /// Told to ignore the pasteboard change caused by our own paste-as-list writes, so
     /// ClipboardMonitor.tick() doesn't re-capture what we just pasted as a brand-new clip.
     weak var clipboardMonitor: ClipboardMonitor?
+    /// Fired whenever a slot binding may have changed, so AppDelegate can re-register the global
+    /// slot hotkeys.
+    var onSlotsChanged: (() -> Void)?
 
     init(store: ClipStore, pasteEngine: PasteEngine, preferences: PreferencesStore) {
         self.store = store
@@ -57,6 +68,13 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         searchField.delegate = self
         searchField.autoresizingMask = [.width, .minYMargin]
 
+        // A keyboard-first app whose keys are undocumented is a keyboard-hostile app.
+        let hint = NSTextField(labelWithString: "↵ paste · ⇧↵ plain · ⌘1–9 quick · ⌘T transform · ⌘E edit")
+        hint.font = .systemFont(ofSize: 10)
+        hint.textColor = .secondaryLabelColor
+        hint.frame = NSRect(x: 8, y: 300, width: 404, height: 14)
+        hint.autoresizingMask = [.width, .minYMargin]
+
         tableView = NSTableView(frame: .zero)
         tableView.rowHeight = Self.rowHeight
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("clip"))
@@ -70,12 +88,13 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         tableView.doubleAction = #selector(pasteSelection)
         tableView.menu = buildContextMenu()
 
-        scrollView = NSScrollView(frame: NSRect(x: 8, y: 8, width: 404, height: 304))
+        scrollView = NSScrollView(frame: NSRect(x: 8, y: 8, width: 404, height: 288))
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.autoresizingMask = [.width, .height]
 
         panel.contentView?.addSubview(searchField)
+        panel.contentView?.addSubview(hint)
         panel.contentView?.addSubview(scrollView)
     }
 
@@ -119,18 +138,39 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     /// Enter/Esc need to work no matter which control has focus — doCommandBy: on the search
     /// field's delegate only fires while focus is IN the search field, but clicking a row (the
     /// only way to ⌘/⇧-click multi-select) moves first responder to the table view. A local
-    /// event monitor catches Return/Escape regardless of first responder, without disturbing
+    /// event monitor catches the popup's keys regardless of first responder, without disturbing
     /// the existing doCommandBy: arrow-key/Return/Escape forwarding used while typing.
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
+            let command = event.modifierFlags.contains(.command)
+            let shift = event.modifierFlags.contains(.shift)
+
             switch event.keyCode {
-            case 36: // Return
+            case 36 where shift:            // ⇧Return — paste without formatting
+                self.pasteSelectionPlain()
+                return nil
+            case 36:                        // Return
                 self.pasteSelection()
                 return nil
-            case 53: // Escape
+            case 53:                        // Escape
                 self.hide()
+                return nil
+            default:
+                break
+            }
+
+            guard command, let characters = event.charactersIgnoringModifiers else { return event }
+            switch characters {
+            case "1"..."9":
+                if let digit = Int(characters) { self.pasteVisibleRow(number: digit) }
+                return nil
+            case "t":
+                self.showTransformMenu()
+                return nil
+            case "e":
+                self.showEditSheet()
                 return nil
             default:
                 return event
@@ -146,16 +186,41 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     }
 
     private func refresh() {
-        allClips = (try? store.fetchAll()) ?? []
+        savedClips = (try? store.saved()) ?? []
+        historyClips = (try? store.history()) ?? []
         applyFilter()
     }
 
     private func applyFilter() {
-        filteredClips = ClipSearch.filter(allClips, query: searchField.stringValue)
-        tableView.reloadData()
-        if !filteredClips.isEmpty {
-            tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        let query = searchField.stringValue
+        let saved = ClipSearch.filter(savedClips, query: query)
+        let history = ClipSearch.filter(historyClips, query: query)
+        var built: [Row] = []
+        if !saved.isEmpty {
+            built.append(.header("Saved"))
+            built.append(contentsOf: saved.map { Row.clip($0) })
         }
+        if !history.isEmpty {
+            built.append(.header("History"))
+            built.append(contentsOf: history.map { Row.clip($0) })
+        }
+        rows = built
+        tableView.reloadData()
+        selectFirstSelectableRow()
+    }
+
+    private func selectFirstSelectableRow() {
+        guard let index = rows.firstIndex(where: { if case .clip = $0 { return true } else { return false } }) else { return }
+        tableView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+    }
+
+    private func clip(at row: Int) -> Clip? {
+        guard row >= 0, row < rows.count, case let .clip(clip) = rows[row] else { return nil }
+        return clip
+    }
+
+    private var selectedClips: [Clip] {
+        tableView.selectedRowIndexes.compactMap { clip(at: $0) }
     }
 
     @objc private func searchChanged() {
@@ -163,17 +228,26 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
     }
 
     private func moveSelection(by delta: Int) {
-        guard !filteredClips.isEmpty else { return }
-        let current = tableView.selectedRow
-        let next = current < 0 ? 0 : max(0, min(filteredClips.count - 1, current + delta))
+        guard !rows.isEmpty else { return }
+        var next = tableView.selectedRow < 0 ? 0 : tableView.selectedRow + delta
+        while next >= 0, next < rows.count, clip(at: next) == nil {
+            next += delta   // step over the section header
+        }
+        guard next >= 0, next < rows.count else { return }
         tableView.selectRowIndexes(IndexSet(integer: next), byExtendingSelection: false)
         tableView.scrollRowToVisible(next)
     }
 
     @objc private func pasteSelection() {
-        let indexes = tableView.selectedRowIndexes
-        guard !indexes.isEmpty else { return }
-        let selection = indexes.map { filteredClips[$0] }
+        paste(selectedClips, plain: false)
+    }
+
+    @objc private func pasteSelectionPlain() {
+        paste(selectedClips, plain: true)
+    }
+
+    private func paste(_ clips: [Clip], plain: Bool) {
+        guard !clips.isEmpty else { return }
 
         // Hide Pastie and hand focus back to whatever app the user was in BEFORE simulating
         // ⌘V — otherwise the keystroke goes to the still-key Pastie panel instead of the
@@ -182,13 +256,78 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         previousApp?.activate(options: [])
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self else { return }
-            let pasted = self.pasteEngine.paste(selection, beforeEachWrite: { [weak self] in
+            let pasted = self.pasteEngine.paste(clips, plain: plain, beforeEachWrite: { [weak self] in
                 self?.clipboardMonitor?.ignoreNextChange()
             })
             if !pasted {
                 self.showAccessibilityFallbackAlert()
             }
         }
+    }
+
+    /// ⌘1–9 inside the popup pastes the Nth *visible clip row* — what the user can see and count,
+    /// which is not the same as a quick-paste slot binding.
+    private func pasteVisibleRow(number: Int) {
+        let clips = rows.compactMap { row -> Clip? in
+            if case let .clip(clip) = row { return clip } else { return nil }
+        }
+        guard number >= 1, number <= clips.count else { return }
+        paste([clips[number - 1]], plain: false)
+    }
+
+    private func showTransformMenu() {
+        guard let clip = selectedClips.first, clip.type == .text, let text = clip.textContent else {
+            NSSound.beep()
+            return
+        }
+        let menu = NSMenu(title: "Transform")
+        for transform in TransformRegistry.all {
+            let item = menu.addItem(withTitle: transform.name, action: #selector(applyTransform(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = TransformInvocation(transform: transform, input: text)
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 8, y: panel.frame.height - 60), in: panel.contentView)
+    }
+
+    /// Carries a chosen transform and the text it was chosen for from the menu item to the action.
+    private final class TransformInvocation: NSObject {
+        let transform: any Transform
+        let input: String
+        init(transform: any Transform, input: String) {
+            self.transform = transform
+            self.input = input
+        }
+    }
+
+    @objc private func applyTransform(_ sender: NSMenuItem) {
+        guard let invocation = sender.representedObject as? TransformInvocation else { return }
+        guard let output = invocation.transform.apply(invocation.input) else {
+            let alert = NSAlert()
+            alert.messageText = "\(invocation.transform.name) couldn't be applied"
+            alert.informativeText = "The selected clip isn't valid input for this transform."
+            alert.alertStyle = .warning
+            alert.runModal()
+            return
+        }
+        pasteTransientText(output)
+    }
+
+    private func showEditSheet() {
+        guard let clip = selectedClips.first, clip.type == .text, let text = clip.textContent else {
+            NSSound.beep()
+            return
+        }
+        ClipEditSheet.present(text: text, in: panel) { [weak self] edited in
+            guard let self, let edited else { return }
+            self.pasteTransientText(edited)
+        }
+    }
+
+    /// Pastes text that is not a stored clip — a transform result or an edited copy. Nothing is
+    /// written to the store: Transforms and edits never modify History.
+    private func pasteTransientText(_ text: String) {
+        let transient = Clip(id: nil, type: .text, textContent: text, imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0)
+        paste([transient], plain: true)
     }
 
     private func showAccessibilityFallbackAlert() {
@@ -203,33 +342,47 @@ final class PopupWindowController: NSObject, NSWindowDelegate {
         }
     }
 
-    func toggleSaved(at row: Int) {
-        guard row >= 0, row < filteredClips.count, let id = filteredClips[row].id else { return }
-        try? store.setSaved(!filteredClips[row].saved, id: id)
-        refresh()
-    }
-
-    func deleteRow(at row: Int) {
-        guard row >= 0, row < filteredClips.count, let id = filteredClips[row].id else { return }
-        try? store.delete(id: id)
-        refresh()
-    }
-
-    // Right-click context menu — the only way to reach toggleSaved/deleteRow from the UI.
+    // Right-click context menu — the only way to reach Save/Assign to Slot/Delete from the UI.
     private func buildContextMenu() -> NSMenu {
         let menu = NSMenu()
         menu.delegate = self
         menu.addItem(withTitle: "Save", action: #selector(toggleSavedFromMenu), keyEquivalent: "").target = self
+
+        let slotItem = menu.addItem(withTitle: "Assign to Slot", action: nil, keyEquivalent: "")
+        let slotMenu = NSMenu()
+        for slot in ClipStore.slotRange {
+            let item = slotMenu.addItem(withTitle: "Slot \(slot)", action: #selector(assignSlotFromMenu(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = slot
+        }
+        let clear = slotMenu.addItem(withTitle: "None", action: #selector(assignSlotFromMenu(_:)), keyEquivalent: "")
+        clear.target = self
+        clear.tag = 0            // tag 0 means "unbind"
+        slotItem.submenu = slotMenu
+
         menu.addItem(withTitle: "Delete", action: #selector(deleteFromMenu), keyEquivalent: "").target = self
         return menu
     }
 
+    @objc private func assignSlotFromMenu(_ sender: NSMenuItem) {
+        guard let id = clip(at: tableView.clickedRow)?.id else { return }
+        try? store.assignSlot(sender.tag == 0 ? nil : sender.tag, id: id)
+        refresh()
+        onSlotsChanged?()
+    }
+
     @objc private func toggleSavedFromMenu() {
-        toggleSaved(at: tableView.clickedRow)
+        guard let clip = clip(at: tableView.clickedRow), let id = clip.id else { return }
+        try? store.setSaved(!clip.saved, id: id)
+        refresh()
+        onSlotsChanged?()
     }
 
     @objc private func deleteFromMenu() {
-        deleteRow(at: tableView.clickedRow)
+        guard let id = clip(at: tableView.clickedRow)?.id else { return }
+        try? store.delete(id: id)
+        refresh()
+        onSlotsChanged?()
     }
 
     // NSWindowDelegate
@@ -261,13 +414,11 @@ extension PopupWindowController: NSSearchFieldDelegate {
 
 extension PopupWindowController: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
-        let row = tableView.clickedRow
-        let validRow = row >= 0 && row < filteredClips.count
-        let saved = validRow && filteredClips[row].saved
+        let clicked = clip(at: tableView.clickedRow)
         for item in menu.items {
-            item.isEnabled = validRow
+            item.isEnabled = clicked != nil
             if item.action == #selector(toggleSavedFromMenu) {
-                item.title = saved ? "Unsave" : "Save"
+                item.title = (clicked?.saved ?? false) ? "Unsave" : "Save"
             }
         }
     }
@@ -275,22 +426,34 @@ extension PopupWindowController: NSMenuDelegate {
 
 extension PopupWindowController: NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
-        filteredClips.count
+        rows.count
+    }
+
+    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+        clip(at: row) != nil
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let clip = filteredClips[row]
-        let cell = NSTextField(labelWithString: displayText(for: clip))
-        cell.lineBreakMode = .byTruncatingTail
-        return cell
+        switch rows[row] {
+        case let .header(title):
+            let cell = NSTextField(labelWithString: title.uppercased())
+            cell.font = .systemFont(ofSize: 10, weight: .semibold)
+            cell.textColor = .secondaryLabelColor
+            return cell
+        case let .clip(clip):
+            let cell = NSTextField(labelWithString: displayText(for: clip))
+            cell.lineBreakMode = .byTruncatingTail
+            return cell
+        }
     }
 
     private func displayText(for clip: Clip) -> String {
-        let savedPrefix = clip.saved ? "📌 " : ""
+        let slot = clip.slotIndex.map { "⌘\($0) " } ?? ""
+        let kept = clip.saved ? "★ " : ""
         switch clip.type {
-        case .text: return savedPrefix + (clip.textContent ?? "")
-        case .file: return savedPrefix + "📄 " + (clip.filePath ?? "")
-        case .image: return savedPrefix + "🖼 Image (\((clip.imageData?.count ?? 0) / 1024) KB)"
+        case .text: return slot + kept + (clip.textContent ?? "")
+        case .file: return slot + kept + "📄 " + (clip.filePath ?? "")
+        case .image: return slot + kept + "🖼 Image (\((clip.imageData?.count ?? 0) / 1024) KB)"
         }
     }
 }
