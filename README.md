@@ -7,7 +7,7 @@ macOS keeps exactly one thing on the clipboard. Copy something else and the prev
 gone. Pastie keeps a history of what you copied, lets you search it, and pastes any entry
 straight into whatever app you are using.
 
-**Status:** working, version 0.3.0. Built for macOS 13 and later. 93 tests pass.
+**Status:** working, version 0.3.1. Built for macOS 13 and later. 137 tests pass.
 
 ---
 
@@ -102,17 +102,18 @@ clipboard and tells you to press ⌘V yourself.
 | Edit before pasting | **⌘E** |
 | Save, assign a slot, or delete an entry | **Right-click** the row |
 | Paste a slot from any app | **⌥⌘1**–**⌥⌘9** (modifier configurable) |
-| Close the panel | **Esc**, or click away |
+| Close the panel | **Esc**, the close button, or click away |
 | Preferences | Menu-bar icon → Preferences…, or **⌘,** |
 | Empty the history | Menu-bar icon → Clear History |
 
 Preferences has four tabs:
 
-- **General** — how many entries to keep, launch at login
-- **Hotkey** — record a new hotkey by pressing the combination you want; choose the modifier the
-  quick-paste slots use (⌥⌘, ⌃⌘, or ⇧⌘)
+- **General** — how many clips to keep, launch at login, and the list of apps to ignore (press
+  **+ Add App…** and pick them; you never type a bundle identifier)
+- **Hotkey** — record a new hotkey by pressing the combination you want, choose the modifier the
+  quick-paste slots use (⌥⌘, ⌃⌘, or ⇧⌘), and read the popup's full key reference
 - **Capture** — turn text, image, or file capture on and off individually; set the maximum image
-  size; keep or drop formatting, with a size cap for it; manage the list of apps to ignore
+  size; keep or drop formatting, with a size cap for it
 - **Appearance** — how many rows the panel shows
 
 ## What Pastie can see, and where it puts it
@@ -141,8 +142,11 @@ anyone with your unlocked Mac. This is a deliberate trade for a local single-use
 should know it. If you copy a password from an app that does not mark it concealed, that
 password is sitting in that file in plain text until it is evicted.
 
-**What leaves your machine: nothing.** There is no server, no account, no analytics, no hosted
-crash reporting, no network code of any kind in the app. If Pastie crashes it writes a report to
+**What leaves your machine: nothing.** There is no server, no account, no analytics and no hosted
+crash reporting. The repository does now contain networking code for a planned LAN sync feature
+(`Sources/Pastie/Sync/`), but the running app never constructs any of it: nothing opens a socket,
+advertises a service, or listens on one. Sync is unfinished and inert — see Project status. If
+Pastie crashes it writes a report to
 `~/Library/Application Support/Pastie/Logs` — a local file you can read, reachable from the
 menu-bar icon → Reveal Logs in Finder. Nothing is transmitted. There is nothing to opt out of.
 
@@ -164,7 +168,7 @@ unsave first, or delete the database file above and restart.
 git clone https://github.com/Stav-Sananes/Pastie.git
 cd Pastie
 swift build              # compile
-swift test               # run the suite — 93 tests
+swift test               # run the suite — 137 tests
 ./Scripts/build-app.sh   # produce build/Pastie.app
 open build/Pastie.app
 ```
@@ -208,17 +212,27 @@ Sources/Pastie/
     SlotHotkeyManager.swift   One global hotkey per *bound* quick-paste slot
   UI/
     MenuBarController.swift   The status item and its menu
+    ExcludedAppPicker.swift   Picks apps to ignore, so nobody types a bundle identifier
     PopupWindowController.swift  The search panel: two sections, keys, paste
     ClipEditSheet.swift       Edit-before-paste; never writes to the store
     PreferencesView.swift     Tab container
     SettingsTabs/             General, Hotkey, Capture, Appearance
     HotkeyRecorderView.swift  "Press a key combination" control
     PreferencesViewModel.swift
+  Sync/                       LAN sync, unfinished and wired to nothing (see Project status)
+    SyncMessage.swift         The wire type and its binary-plist codec
+    MessageFraming.swift      Length-prefix framing
+    SyncCrypto.swift          PBKDF2 key derivation, passphrase in the keychain
+    PeerTransport.swift       Transport protocol and its NWConnection implementation
+    SyncedFileStore.swift     Bytes received for file clips
+    SyncCoordinator.swift     Dedup and loop prevention
+    SyncService.swift         Bonjour discovery and TLS-PSK
   Preferences/PreferencesStore.swift   UserDefaults-backed settings
   Onboarding/OnboardingController.swift  First-run Accessibility explanation
   Support/
     LaunchAtLogin.swift       SMAppService wrapper
     AccessibilityStatus.swift Test seam over AXIsProcessTrusted()
+    InstalledApp.swift        A bundle identifier resolved to a name and icon
     CrashLogFormatter.swift   Pure formatting of a crash record
     CrashLogger.swift         Handler installation and local log writing
 ```
@@ -226,7 +240,7 @@ Sources/Pastie/
 The split is deliberate: **anything with a rule in it is a pure function in its own type**, and
 the AppKit classes are wiring. `CaptureFilter` decides what may be captured but touches no
 pasteboard; `ClipSearch` filters an array; `HotkeyFormatter` formats; a `Transform` is a pure
-function. That is why 93 tests can cover the logic of an app whose interface is untestable — the
+function. That is why 137 tests can cover the logic of an app whose interface is untestable — the
 untestable parts contain no decisions.
 
 ## Testing
@@ -300,6 +314,16 @@ wants. Above the configured limit (5MB by default), the image is redrawn at 400 
 only the thumbnail is stored. The original is not kept — pasting such an entry gives you the
 thumbnail. This is a real limitation, not a display optimisation.
 
+### Why capture follows the pasteboard's declared type order
+
+A copy usually lands on the pasteboard several times over, in several representations, and the
+order the source declares them in is the source saying which one it means. Pastie used to check
+file, then image, then text, and take the first that could be read — which broke on text apps.
+Terminal and Electron apps hang a 4×4-pixel placeholder image off a plain string copy, so a
+fixed image-before-text rule stored that pixel and threw the copied text away, leaving rows in
+the history reading `Image (0 KB)`. Reading the declared order instead gets both cases right: a
+text app declares the string first, an image copy declares the image first.
+
 ### Why deduplication only checks the most recent entry
 
 `ClipboardMonitor` compares a new clip against `store.mostRecent()`, not the whole history. Copy
@@ -346,9 +370,9 @@ remains the clip's identity for search and deduplication.
 | Core clipboard manager (v1) | **Shipped** — capture, popup, search, paste, pin, retention, excluded apps, launch at login | This repo |
 | Menu bar + Settings redesign | **Shipped** — four Settings tabs, hotkey remapping UI, per-type capture toggles, row count | This repo |
 | Saved clips, quick-paste slots, transforms, release polish (v3) | **Shipped** — Saved section, slots 1–9 with global hotkeys, rich/plain paste, nine transforms, edit-before-paste, Accessibility onboarding, local crash logs | This repo |
-| Multi-machine LAN sync (v2) | **Planned** — spec and task-level plan written, not started | Local docs, not in this repo |
+| Multi-machine LAN sync (v2) | **Partial, inert** — wire format, framing, PBKDF2 key derivation, transport, coordinator and a Bonjour/TLS-PSK service are in `Sources/Pastie/Sync/` and under test, but nothing constructs them: no settings, no wiring, no discovery identity. Do not read its presence as a feature. | This repo |
 
-The design documents for the planned track are deliberately kept out of version control, so
+The design documents for the sync track are deliberately kept out of version control, so
 what you can clone is the software that exists rather than a description of software that does
 not. Nothing above is a promise; it is a record of what has been thought through.
 
@@ -360,7 +384,14 @@ a plain `zip` would corrupt.
 
 Ad-hoc is not Developer ID: it satisfies Apple Silicon's requirement that every binary carry a
 signature, but it tells Gatekeeper nothing about who built it, so a downloaded copy is blocked
-until the user allows it explicitly. Removing that friction needs a paid Apple Developer Program
+until the user allows it explicitly.
+
+It has a second cost, and it bites on every update: macOS ties an Accessibility grant to the
+binary's code hash, and an ad-hoc rebuild changes that hash. After replacing `Pastie.app`, the
+Accessibility list still shows Pastie switched on while `AXIsProcessTrusted()` reports false, and
+pasting silently falls back to "press ⌘V yourself". **Switch Pastie off and back on in System
+Settings → Privacy & Security → Accessibility after updating.** Pastie says so in its first-run
+explanation, once per version. Removing that friction needs a paid Apple Developer Program
 membership for Developer ID signing and notarisation — which would also unlock in-app updates.
 The build script takes a `SIGN_IDENTITY` environment variable so that switch is one variable and
 a notarisation step, not a rewrite.
