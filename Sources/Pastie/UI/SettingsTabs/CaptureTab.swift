@@ -19,6 +19,15 @@ struct CaptureTab: View {
                 }
                 .pickerStyle(.segmented)
             }
+            Section("Formatting") {
+                Toggle("Keep formatting (RTF)", isOn: $viewModel.rtfCaptureEnabled)
+                Stepper("Maximum formatting size: \(viewModel.rtfSizeCapMB) MB",
+                        value: $viewModel.rtfSizeCapMB, in: 1...25)
+                    .disabled(!viewModel.rtfCaptureEnabled)
+                Text("Formatted text larger than this is stored as plain text.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding()
     }
