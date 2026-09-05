@@ -86,4 +86,21 @@ final class PreferencesStoreTests: XCTestCase {
         XCTAssertFalse(store.rtfCaptureEnabled)
         XCTAssertEqual(store.rtfSizeCapBytes, 4096)
     }
+
+    func testSlotHotkeyModifiersDefaultToOptionCommand() {
+        let defaults = UserDefaults(suiteName: "PastieTests.slots.\(UUID().uuidString)")!
+        let store = PreferencesStore(defaults: defaults)
+
+        XCTAssertEqual(store.slotHotkeyModifiers, UInt32(NSEvent.ModifierFlags([.option, .command]).rawValue))
+    }
+
+    func testSlotHotkeyModifiersRoundTrip() {
+        let defaults = UserDefaults(suiteName: "PastieTests.slots.\(UUID().uuidString)")!
+        let store = PreferencesStore(defaults: defaults)
+        let control = UInt32(NSEvent.ModifierFlags([.control, .command]).rawValue)
+
+        store.slotHotkeyModifiers = control
+
+        XCTAssertEqual(store.slotHotkeyModifiers, control)
+    }
 }

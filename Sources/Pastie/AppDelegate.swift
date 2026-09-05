@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: HotkeyManager!
     private var menuBarController: MenuBarController!
     private var popupController: PopupWindowController!
+    private var slotHotkeys: SlotHotkeyManager!
     private var preferencesWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -44,6 +45,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.popupController.toggle()
         }
         hotkeyManager.registerFromPreferences()
+
+        slotHotkeys = SlotHotkeyManager(store: clipStore, preferences: preferences) { [weak self] clip in
+            guard let self else { return }
+            // Paste straight into the frontmost app: a slot hotkey never shows the popup.
+            let pasted = PasteEngine().paste([clip], beforeEachWrite: { [weak self] in
+                self?.monitor.ignoreNextChange()
+            })
+            if !pasted { NSSound.beep() }
+        }
+        slotHotkeys.registerBoundSlots()
+        popupController.onSlotsChanged = { [weak self] in
+            self?.slotHotkeys.registerBoundSlots()
+        }
 
         requestAccessibilityIfNeeded()
     }
