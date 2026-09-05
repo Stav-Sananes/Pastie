@@ -58,4 +58,117 @@ final class ClipboardMonitorTests: XCTestCase {
 
         XCTAssertEqual(try store.fetchAll().count, 2, "external changes after the ignored one should resume being captured")
     }
+
+    func testTickSkipsImageWhenCaptureImagesDisabled() throws {
+        let store = try ClipStore(dbQueue: try DatabaseQueue(), retentionCount: 500)
+        let prefs = PreferencesStore(defaults: UserDefaults(suiteName: "pastie-monitor-tests-\(UUID())")!)
+        prefs.captureImages = false
+        let monitor = ClipboardMonitor(store: store, preferences: prefs)
+
+        NSPasteboard.general.clearContents()
+        let image = NSImage(size: NSSize(width: 4, height: 4))
+        image.lockFocus()
+        NSColor.red.set()
+        NSRect(x: 0, y: 0, width: 4, height: 4).fill()
+        image.unlockFocus()
+        NSPasteboard.general.writeObjects([image])
+
+        monitor.tick()
+
+        XCTAssertEqual(try store.fetchAll().count, 0)
+    }
+
+    func testTickCapturesImageWhenCaptureImagesEnabled() throws {
+        let store = try ClipStore(dbQueue: try DatabaseQueue(), retentionCount: 500)
+        let prefs = PreferencesStore(defaults: UserDefaults(suiteName: "pastie-monitor-tests-\(UUID())")!)
+        let monitor = ClipboardMonitor(store: store, preferences: prefs)
+
+        NSPasteboard.general.clearContents()
+        let image = NSImage(size: NSSize(width: 4, height: 4))
+        image.lockFocus()
+        NSColor.blue.set()
+        NSRect(x: 0, y: 0, width: 4, height: 4).fill()
+        image.unlockFocus()
+        NSPasteboard.general.writeObjects([image])
+
+        monitor.tick()
+
+        let all = try store.fetchAll()
+        XCTAssertEqual(all.count, 1)
+        XCTAssertEqual(all.first?.type, .image)
+    }
+
+    private func makeRTF(_ text: String) -> Data {
+        let attributed = NSAttributedString(string: text)
+        return attributed.rtf(from: NSRange(location: 0, length: attributed.length), documentAttributes: [:])!
+    }
+
+    private func makeMonitor(defaults: UserDefaults) -> ClipboardMonitor {
+        let dbQueue = try! DatabaseQueue()
+        let store = try! ClipStore(dbQueue: dbQueue, retentionCount: 500)
+        return ClipboardMonitor(store: store, preferences: PreferencesStore(defaults: defaults))
+    }
+
+    func testCapturesRTFAlongsidePlainText() {
+        let defaults = UserDefaults(suiteName: "PastieTests.capture.\(UUID().uuidString)")!
+        let monitor = makeMonitor(defaults: defaults)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("PastieTests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.setData(makeRTF("styled"), forType: .rtf)
+        pasteboard.setString("styled", forType: .string)
+
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+
+        XCTAssertEqual(clip?.type, .text)
+        XCTAssertEqual(clip?.textContent, "styled")
+        XCTAssertNotNil(clip?.rtfData, "RTF on the pasteboard is kept alongside the plain string")
+    }
+
+    func testPlainOnlyPasteboardStoresNoRTF() {
+        let defaults = UserDefaults(suiteName: "PastieTests.capture.\(UUID().uuidString)")!
+        let monitor = makeMonitor(defaults: defaults)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("PastieTests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.setString("just words", forType: .string)
+
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+
+        XCTAssertEqual(clip?.textContent, "just words")
+        XCTAssertNil(clip?.rtfData)
+    }
+
+    func testRTFOverTheCapIsDroppedAndPlainTextSurvives() {
+        let defaults = UserDefaults(suiteName: "PastieTests.capture.\(UUID().uuidString)")!
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.rtfSizeCapBytes = 16
+        let dbQueue = try! DatabaseQueue()
+        let store = try! ClipStore(dbQueue: dbQueue, retentionCount: 500)
+        let monitor = ClipboardMonitor(store: store, preferences: preferences)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("PastieTests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.setData(makeRTF("a long styled run of text"), forType: .rtf)
+        pasteboard.setString("a long styled run of text", forType: .string)
+
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+
+        XCTAssertEqual(clip?.textContent, "a long styled run of text", "the clip still works")
+        XCTAssertNil(clip?.rtfData, "oversized RTF is dropped, not stored")
+    }
+
+    func testRTFCaptureDisabledStoresNoRTF() {
+        let defaults = UserDefaults(suiteName: "PastieTests.capture.\(UUID().uuidString)")!
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.rtfCaptureEnabled = false
+        let dbQueue = try! DatabaseQueue()
+        let store = try! ClipStore(dbQueue: dbQueue, retentionCount: 500)
+        let monitor = ClipboardMonitor(store: store, preferences: preferences)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("PastieTests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.setData(makeRTF("styled"), forType: .rtf)
+        pasteboard.setString("styled", forType: .string)
+
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+
+        XCTAssertNil(clip?.rtfData)
+    }
 }

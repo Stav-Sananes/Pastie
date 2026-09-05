@@ -130,7 +130,7 @@ final class SyncCoordinator {
             filePath: filePath,
             sourceApp: message.originDeviceName,
             timestamp: timestamp,
-            pinned: false,
+            saved: false,
             sortOrder: 0,
             originDevice: message.originDeviceID
         )
