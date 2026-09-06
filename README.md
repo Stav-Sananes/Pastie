@@ -7,7 +7,7 @@ macOS keeps exactly one thing on the clipboard. Copy something else and the prev
 gone. Pastie keeps a history of what you copied, lets you search it, and pastes any entry
 straight into whatever app you are using.
 
-**Status:** working, version 0.3.1. Built for macOS 13 and later. 137 tests pass.
+**Status:** working, version 0.3.1. Built for macOS 13 and later. 153 tests pass.
 
 ---
 
@@ -138,10 +138,17 @@ than a guarantee: if a password manager you rely on does not set it, add it to t
 instead. Apps on that list are skipped entirely while they are frontmost. Capture types you turn off are never stored.
 
 **Image text recognition.** When you copy an image, Pastie reads the text it contains using
-Apple's Vision framework, entirely on your Mac. The recognized text is indexed for search purposes
-only — it is never stored separately, never displayed, never pasted, and never leaves your machine.
-It applies to images copied after this version; images already in your history remain unsearchable
-until copied again.
+Apple's Vision framework, entirely on your Mac — nothing is uploaded, and language detection is
+automatic, limited to whatever languages Vision supports on the running macOS (on the Mac this
+was written on, that list does not include Hebrew; it does include French and several dozen
+others — check `try VNRecognizeTextRequest().supportedRecognitionLanguages()` on yours if it
+matters to you). The recognised text is stored alongside the clip, in the same SQLite file
+described below — it is plain text like everything else in that file, used only for search:
+never displayed, never pasted, never leaves the machine. That also means a screenshot of a
+password or a 2FA code becomes searchable plain text on disk, the same way copying that password
+as text already would. If that is not a trade you want, turn it off in Preferences → Capture →
+"Search text inside images". It applies to images copied after this version; images already in
+your history remain unsearchable until copied again.
 
 **Where it goes.** A SQLite database at:
 
@@ -180,7 +187,7 @@ unsave first, or delete the database file above and restart.
 git clone https://github.com/Stav-Sananes/Pastie.git
 cd Pastie
 swift build              # compile
-swift test               # run the suite — 137 tests
+swift test               # run the suite — 153 tests
 ./Scripts/build-app.sh   # produce build/Pastie.app
 open build/Pastie.app
 ```
@@ -213,6 +220,9 @@ Sources/Pastie/
     ClipboardMonitor.swift    The polling loop; turns a pasteboard into a Clip
     CaptureFilter.swift       Pure rules for what may be captured
   Search/ClipSearch.swift     Pure substring filtering over clips
+  OCR/
+    TextRecognizing.swift     The recognition seam that keeps Vision out of tests
+    VisionTextRecognizer.swift  The only file importing Vision; on-device, serial queue
   Transforms/
     Transform.swift           The protocol and the registry that is also the menu order
     BuiltInTransforms.swift   Nine pure String -> String? functions
@@ -252,7 +262,7 @@ Sources/Pastie/
 The split is deliberate: **anything with a rule in it is a pure function in its own type**, and
 the AppKit classes are wiring. `CaptureFilter` decides what may be captured but touches no
 pasteboard; `ClipSearch` filters an array; `HotkeyFormatter` formats; a `Transform` is a pure
-function. That is why 137 tests can cover the logic of an app whose interface is untestable — the
+function. That is why 153 tests can cover the logic of an app whose interface is untestable — the
 untestable parts contain no decisions.
 
 ## Testing
@@ -266,8 +276,9 @@ What is covered: storage (insert, eviction, the Saved exemption, the slot API an
 move-on-conflict rule, migration 2 against a hand-built v1 database), capture rules (concealed and
 transient types, excluded apps, per-type toggles, RTF capture and its size cap), what the paste
 engine writes to a pasteboard for rich and plain, every transform including its failure cases,
-search, hotkey capture and formatting, preferences defaults and round-trips, the onboarding
-decision, crash-log formatting and writing, and panel sizing.
+search including image clips matching on recognised text, OCR's storage round trip and its
+eviction-race no-op, hotkey capture and formatting, preferences defaults and round-trips, the
+onboarding decision, crash-log formatting and writing, and panel sizing.
 
 What is not, and cannot easily be: global hotkey registration, synthetic ⌘V into another app,
 and the panel's event handling. These need a real user session and a real frontmost app. They
@@ -325,6 +336,12 @@ A screenshot on a Retina display can be tens of megabytes, and 500 of those is a
 wants. Above the configured limit (5MB by default), the image is redrawn at 400 points wide and
 only the thumbnail is stored. The original is not kept — pasting such an entry gives you the
 thumbnail. This is a real limitation, not a display optimisation.
+
+### Why OCR reads the original image, not the stored one
+
+`downsampleIfNeeded` shrinks anything over the size cap to 400 points wide, which makes
+screenshot text unreadable. So `makeClip` returns the full-size bytes beside the clip, and
+recognition runs on those, while the row itself keeps only the thumbnail.
 
 ### Why capture follows the pasteboard's declared type order
 
