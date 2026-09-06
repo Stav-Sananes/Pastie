@@ -328,14 +328,47 @@ extension ClipStoreTests {
     }
 
     func testMigrationAddsOCRTextColumnWithoutLosingRows() throws {
-        // A database at migration 3 (createClip + savedAndRichPayload + addSyncColumns is what
-        // ClipStore itself produces), reopened, must gain ocrText as nil and keep its rows.
+        // Simulate a v3 database: create the migration-3 schema and insert a row, then open it
+        // through ClipStore which must run migration 4 and confirm ocrText is added as nil.
         let dbQueue = try DatabaseQueue()
-        let first = try ClipStore(dbQueue: dbQueue, retentionCount: 500)
-        _ = try first.insert(Clip(id: nil, type: .text, textContent: "survivor", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
+        try dbQueue.write { db in
+            try db.create(table: "clip") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("type", .text).notNull()
+                t.column("textContent", .text)
+                t.column("imageData", .blob)
+                t.column("filePath", .text)
+                t.column("sourceApp", .text)
+                t.column("timestamp", .datetime).notNull()
+                t.column("saved", .boolean).notNull().defaults(to: false)
+                t.column("sortOrder", .integer).notNull().defaults(to: 0)
+                t.column("rtfData", .blob)
+                t.column("slotIndex", .integer)
+                t.column("uuid", .text)
+                t.column("originDevice", .text)
+            }
+            // Create indexes from migration 2 and 3
+            try db.execute(sql: """
+                CREATE UNIQUE INDEX IF NOT EXISTS clip_on_slotIndex
+                ON clip(slotIndex) WHERE slotIndex IS NOT NULL
+                """)
+            try db.execute(sql: """
+                CREATE UNIQUE INDEX IF NOT EXISTS clip_on_uuid
+                ON clip(uuid)
+                """)
+            // Mark migrations 1, 2, 3 as already applied so ClipStore only runs migration 4.
+            try db.execute(sql: "CREATE TABLE IF NOT EXISTS grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)")
+            try db.execute(sql: "INSERT INTO grdb_migrations (identifier) VALUES ('createClip')")
+            try db.execute(sql: "INSERT INTO grdb_migrations (identifier) VALUES ('savedAndRichPayload')")
+            try db.execute(sql: "INSERT INTO grdb_migrations (identifier) VALUES ('addSyncColumns')")
+            try db.execute(sql: """
+                INSERT INTO clip (type, textContent, timestamp, saved, sortOrder, uuid)
+                VALUES ('text', 'survivor', ?, 0, 0, ?)
+                """, arguments: [Date(), UUID().uuidString])
+        }
 
-        let reopened = try ClipStore(dbQueue: dbQueue, retentionCount: 500)
-        let all = try reopened.fetchAll()
+        let store = try ClipStore(dbQueue: dbQueue, retentionCount: 500)
+        let all = try store.fetchAll()
 
         XCTAssertEqual(all.count, 1, "migration must not lose rows")
         XCTAssertEqual(all.first?.textContent, "survivor")
