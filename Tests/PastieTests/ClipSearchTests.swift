@@ -24,11 +24,6 @@ final class ClipSearchTests: XCTestCase {
         XCTAssertEqual(ClipSearch.filter([fileClip], query: "report").count, 1)
     }
 
-    func testQueryExcludesImageClips() {
-        let imageClip = Clip(id: nil, type: .image, textContent: nil, imageData: Data([0x01]), filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0)
-        XCTAssertEqual(ClipSearch.filter([imageClip], query: "anything").count, 0)
-    }
-
     private func imageClip(ocrText: String?) -> Clip {
         Clip(id: nil, type: .image, textContent: nil, imageData: Data([0x01]), filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0, ocrText: ocrText)
     }

@@ -22,6 +22,10 @@ final class VisionTextRecognizer: TextRecognizing {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
+        // The framework default is English-only (`recognitionLanguages = ["en-US"]`,
+        // `automaticallyDetectsLanguage = false`), which would silently leave every
+        // non-English screenshot unsearchable.
+        request.automaticallyDetectsLanguage = true
 
         let handler = VNImageRequestHandler(data: imageData, options: [:])
         do {

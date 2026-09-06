@@ -106,7 +106,9 @@ final class ClipStore {
     }
 
     /// Writes recognised text onto a clip. A no-op when the row is gone — recognition finishes
-    /// after capture, by which time the clip may have been evicted or deleted.
+    /// after capture, by which time the clip may have been evicted or deleted. The late write can
+    /// never land on a different clip: the `clip` table's primary key is `AUTOINCREMENT`
+    /// (migration 1), so an evicted row's id is never reused.
     func setOCRText(_ text: String?, id: Int64) throws {
         try dbQueue.write { db in
             if var clip = try Clip.fetchOne(db, key: id) {
