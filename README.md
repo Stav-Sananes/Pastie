@@ -7,7 +7,7 @@ macOS keeps exactly one thing on the clipboard. Copy something else and the prev
 gone. Pastie keeps a history of what you copied, lets you search it, and pastes any entry
 straight into whatever app you are using.
 
-**Status:** working, version 0.3.1. Built for macOS 13 and later. 153 tests pass.
+**Status:** working, version 0.4.0. Built for macOS 13 and later. 153 tests pass.
 
 ---
 
