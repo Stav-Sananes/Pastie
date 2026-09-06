@@ -117,7 +117,7 @@ final class ClipboardMonitorTests: XCTestCase {
         pasteboard.setData(makeRTF("styled"), forType: .rtf)
         pasteboard.setString("styled", forType: .string)
 
-        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)?.clip
 
         XCTAssertEqual(clip?.type, .text)
         XCTAssertEqual(clip?.textContent, "styled")
@@ -131,7 +131,7 @@ final class ClipboardMonitorTests: XCTestCase {
         pasteboard.clearContents()
         pasteboard.setString("just words", forType: .string)
 
-        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)?.clip
 
         XCTAssertEqual(clip?.textContent, "just words")
         XCTAssertNil(clip?.rtfData)
@@ -149,7 +149,7 @@ final class ClipboardMonitorTests: XCTestCase {
         pasteboard.setData(makeRTF("a long styled run of text"), forType: .rtf)
         pasteboard.setString("a long styled run of text", forType: .string)
 
-        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)?.clip
 
         XCTAssertEqual(clip?.textContent, "a long styled run of text", "the clip still works")
         XCTAssertNil(clip?.rtfData, "oversized RTF is dropped, not stored")
@@ -167,7 +167,7 @@ final class ClipboardMonitorTests: XCTestCase {
         pasteboard.setData(makeRTF("styled"), forType: .rtf)
         pasteboard.setString("styled", forType: .string)
 
-        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)?.clip
 
         XCTAssertNil(clip?.rtfData)
     }
@@ -183,7 +183,7 @@ final class ClipboardMonitorTests: XCTestCase {
         pasteboard.setString("the words I copied", forType: .string)
         pasteboard.setData(tinyTIFF(), forType: .tiff)
 
-        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)?.clip
 
         XCTAssertEqual(clip?.type, .text, "a text copy must not become a 4x4 pixel image")
         XCTAssertEqual(clip?.textContent, "the words I copied")
@@ -199,7 +199,7 @@ final class ClipboardMonitorTests: XCTestCase {
         pasteboard.setData(tinyTIFF(), forType: .tiff)
         pasteboard.setString("https://example.com/cat.png", forType: .string)
 
-        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)?.clip
 
         XCTAssertEqual(clip?.type, .image)
     }
@@ -212,7 +212,7 @@ final class ClipboardMonitorTests: XCTestCase {
         pasteboard.declareTypes([.tiff], owner: nil)
         pasteboard.setData(tinyTIFF(), forType: .tiff)
 
-        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)
+        let clip = monitor.makeClip(from: pasteboard, sourceApp: nil)?.clip
 
         XCTAssertEqual(clip?.type, .image)
     }
@@ -223,5 +223,112 @@ final class ClipboardMonitorTests: XCTestCase {
         NSColor.red.drawSwatch(in: NSRect(x: 0, y: 0, width: 4, height: 4))
         image.unlockFocus()
         return image.tiffRepresentation!
+    }
+
+    /// Records what it was asked to read and answers immediately, so the tests stay synchronous.
+    final class FakeRecognizer: TextRecognizing {
+        private(set) var receivedData: [Data] = []
+        var result: String?
+
+        init(result: String? = nil) {
+            self.result = result
+        }
+
+        func recognizeText(in imageData: Data, completion: @escaping (String?) -> Void) {
+            receivedData.append(imageData)
+            completion(result)
+        }
+    }
+
+    private func makeMonitor(recognizer: TextRecognizing?, maxImageSizeMB: Int = 25) throws -> (ClipboardMonitor, ClipStore, PreferencesStore) {
+        let store = try ClipStore(dbQueue: try DatabaseQueue(), retentionCount: 500)
+        let prefs = PreferencesStore(defaults: UserDefaults(suiteName: "pastie-monitor-ocr-\(UUID())")!)
+        prefs.maxImageSizeMB = maxImageSizeMB
+        let monitor = ClipboardMonitor(store: store, preferences: prefs, recognizer: recognizer)
+        return (monitor, store, prefs)
+    }
+
+    /// A solid-colour PNG-backed TIFF of the given size. Big sizes are what push a clip past the
+    /// downsample threshold; the content does not matter because the recogniser is faked.
+    private func makeImageData(width: CGFloat, height: CGFloat) -> Data {
+        let image = NSImage(size: NSSize(width: width, height: height))
+        image.lockFocus()
+        NSColor.white.drawSwatch(in: NSRect(x: 0, y: 0, width: width, height: height))
+        image.unlockFocus()
+        return image.tiffRepresentation!
+    }
+
+    private func copyImageToPasteboard(_ data: Data) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(data, forType: .tiff)
+    }
+
+    func testCapturedImageIsRecognisedAndTheTextLandsOnTheClip() throws {
+        let recognizer = FakeRecognizer(result: "INVOICE 2026-09")
+        let (monitor, store, _) = try makeMonitor(recognizer: recognizer)
+        copyImageToPasteboard(makeImageData(width: 40, height: 40))
+
+        monitor.tick()
+
+        XCTAssertEqual(recognizer.receivedData.count, 1, "an image clip is handed to the recogniser once")
+        XCTAssertEqual(try store.fetchAll().first?.ocrText, "INVOICE 2026-09")
+    }
+
+    func testRecogniserSeesTheOriginalImageNotTheDownsampledOne() throws {
+        // 1MB cap with a large image forces downsampleIfNeeded to shrink what is stored.
+        let recognizer = FakeRecognizer(result: "read me")
+        let (monitor, store, _) = try makeMonitor(recognizer: recognizer, maxImageSizeMB: 1)
+        let original = makeImageData(width: 1200, height: 1200)
+        copyImageToPasteboard(original)
+
+        monitor.tick()
+
+        let stored = try XCTUnwrap(try store.fetchAll().first?.imageData)
+        XCTAssertLessThan(stored.count, original.count, "precondition: the stored image was downsampled")
+        XCTAssertEqual(recognizer.receivedData.first?.count, original.count, "OCR must read the full-size image, not the 400-point thumbnail")
+    }
+
+    func testRecognitionIsSkippedWhenTheSettingIsOff() throws {
+        let recognizer = FakeRecognizer(result: "should not be read")
+        let (monitor, store, prefs) = try makeMonitor(recognizer: recognizer)
+        prefs.ocrEnabled = false
+        copyImageToPasteboard(makeImageData(width: 40, height: 40))
+
+        monitor.tick()
+
+        XCTAssertTrue(recognizer.receivedData.isEmpty)
+        XCTAssertNil(try store.fetchAll().first?.ocrText)
+    }
+
+    func testTextClipsNeverReachTheRecogniser() throws {
+        let recognizer = FakeRecognizer(result: "should not be read")
+        let (monitor, _, _) = try makeMonitor(recognizer: recognizer)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("plain words \(UUID())", forType: .string)
+
+        monitor.tick()
+
+        XCTAssertTrue(recognizer.receivedData.isEmpty)
+    }
+
+    func testAnEmptyRecognitionLeavesTheClipUnsearchableWithoutFailing() throws {
+        let recognizer = FakeRecognizer(result: nil)
+        let (monitor, store, _) = try makeMonitor(recognizer: recognizer)
+        copyImageToPasteboard(makeImageData(width: 40, height: 40))
+
+        monitor.tick()
+
+        XCTAssertEqual(try store.fetchAll().count, 1, "the image clip is stored either way")
+        XCTAssertNil(try store.fetchAll().first?.ocrText)
+    }
+
+    func testCaptureWorksWithNoRecogniserAtAll() throws {
+        let (monitor, store, _) = try makeMonitor(recognizer: nil)
+        copyImageToPasteboard(makeImageData(width: 40, height: 40))
+
+        monitor.tick()
+
+        XCTAssertEqual(try store.fetchAll().count, 1)
+        XCTAssertNil(try store.fetchAll().first?.ocrText)
     }
 }

@@ -39,7 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onOpenPreferences: { [weak self] in self?.openPreferences() }
         )
 
-        monitor = ClipboardMonitor(store: clipStore, preferences: preferences)
+        monitor = ClipboardMonitor(store: clipStore, preferences: preferences, recognizer: VisionTextRecognizer())
         monitor.start()
         popupController.clipboardMonitor = monitor
 

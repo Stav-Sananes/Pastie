@@ -2,9 +2,18 @@ import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
+/// What one pasteboard read produced: the Clip to store, plus — for images — the full-size bytes
+/// before downsampling. Text recognition needs the original: downsampleIfNeeded shrinks anything
+/// over the size cap to 400 points wide, which leaves a screenshot's text unreadable.
+struct CapturedClip {
+    let clip: Clip
+    let originalImageData: Data?
+}
+
 final class ClipboardMonitor {
     private let store: ClipStore
     private let preferences: PreferencesStore
+    private let recognizer: TextRecognizing?
     private var lastChangeCount: Int
     private var timer: Timer?
     private let pollInterval: TimeInterval
@@ -13,9 +22,10 @@ final class ClipboardMonitor {
     /// treated as our own write rather than a new external copy, so it isn't captured.
     private var ignoringSelfWrite = false
 
-    init(store: ClipStore, preferences: PreferencesStore, pollInterval: TimeInterval = 0.5) {
+    init(store: ClipStore, preferences: PreferencesStore, recognizer: TextRecognizing? = nil, pollInterval: TimeInterval = 0.5) {
         self.store = store
         self.preferences = preferences
+        self.recognizer = recognizer
         self.pollInterval = pollInterval
         self.lastChangeCount = NSPasteboard.general.changeCount
     }
@@ -64,16 +74,37 @@ final class ClipboardMonitor {
             captureFiles: preferences.captureFiles
         ) else { return }
 
-        guard let clip = makeClip(from: pasteboard, sourceApp: bundleID) else { return }
+        guard let captured = makeClip(from: pasteboard, sourceApp: bundleID) else { return }
 
-        if let last = try? store.mostRecent(), last.hasSameContent(as: clip) {
+        if let last = try? store.mostRecent(), last.hasSameContent(as: captured.clip) {
             return
         }
 
         do {
-            try store.insert(clip)
+            let inserted = try store.insert(captured.clip)
+            recognizeIfNeeded(captured, insertedID: inserted.id)
         } catch {
             NSLog("ClipboardMonitor: failed to insert clip: \(error)")
+        }
+    }
+
+    /// Hands an image clip's original bytes to the recogniser and writes the result back. The clip
+    /// is already stored and visible by this point — recognition only makes it findable, so
+    /// nothing waits on it and every failure is silent.
+    private func recognizeIfNeeded(_ captured: CapturedClip, insertedID: Int64?) {
+        guard captured.clip.type == .image,
+              preferences.ocrEnabled,
+              let recognizer,
+              let imageData = captured.originalImageData,
+              let id = insertedID else { return }
+
+        recognizer.recognizeText(in: imageData) { [weak self] text in
+            guard let self, let text else { return }
+            do {
+                try self.store.setOCRText(text, id: id)
+            } catch {
+                NSLog("ClipboardMonitor: failed to store recognised text: \(error)")
+            }
         }
     }
 
@@ -106,23 +137,33 @@ final class ClipboardMonitor {
         return nil
     }
 
-    func makeClip(from pasteboard: NSPasteboard, sourceApp: String?) -> Clip? {
+    func makeClip(from pasteboard: NSPasteboard, sourceApp: String?) -> CapturedClip? {
         let now = Date()
         switch inferClipType(from: pasteboard) {
         case .file:
             guard let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
                   let first = fileURLs.first, first.isFileURL else { return nil }
-            return Clip(id: nil, type: .file, textContent: nil, imageData: nil, filePath: first.path, sourceApp: sourceApp, timestamp: now, saved: false, sortOrder: 0)
+            return CapturedClip(
+                clip: Clip(id: nil, type: .file, textContent: nil, imageData: nil, filePath: first.path, sourceApp: sourceApp, timestamp: now, saved: false, sortOrder: 0),
+                originalImageData: nil
+            )
         case .image:
             if let image = NSImage(pasteboard: pasteboard), let tiff = image.tiffRepresentation {
                 let data = downsampleIfNeeded(tiff)
-                return Clip(id: nil, type: .image, textContent: nil, imageData: data, filePath: nil, sourceApp: sourceApp, timestamp: now, saved: false, sortOrder: 0)
+                return CapturedClip(
+                    clip: Clip(id: nil, type: .image, textContent: nil, imageData: data, filePath: nil, sourceApp: sourceApp, timestamp: now, saved: false, sortOrder: 0),
+                    originalImageData: tiff
+                )
             }
             // The image type was declared but nothing decodable came back; a string beside it is
             // better than dropping the copy entirely.
-            return textClip(from: pasteboard, sourceApp: sourceApp, now: now)
+            return textClip(from: pasteboard, sourceApp: sourceApp, now: now).map {
+                CapturedClip(clip: $0, originalImageData: nil)
+            }
         case .text:
-            return textClip(from: pasteboard, sourceApp: sourceApp, now: now)
+            return textClip(from: pasteboard, sourceApp: sourceApp, now: now).map {
+                CapturedClip(clip: $0, originalImageData: nil)
+            }
         case .none:
             return nil
         }
