@@ -30,6 +30,9 @@ straight into whatever app you are using.
   whatever you were doing.
 - **Searches as you type.** Filter the history, pick an entry with the arrow keys, press ↵, and
   it is pasted into the app you were in.
+- **Searches text inside images.** Screenshots and other images you copy are scanned for text
+  using Apple's Vision framework, entirely on this Mac. The text is indexed for search but never
+  displayed or pasted.
 - **Pastes several at once.** Select multiple entries and they are pasted one after another.
 - **Keeps what matters.** A **Saved** clip is never dropped when the history fills up, and sits
   in its own section above the stream.
@@ -116,7 +119,7 @@ Preferences has four tabs:
 - **Hotkey** — record a new hotkey by pressing the combination you want, choose the modifier the
   quick-paste slots use (⌥⌘, ⌃⌘, or ⇧⌘), and read the popup's full key reference
 - **Capture** — turn text, image, or file capture on and off individually; set the maximum image
-  size; keep or drop formatting, with a size cap for it
+  size; toggle searching text inside copied images; keep or drop formatting, with a size cap for it
 - **Appearance** — how many rows the panel shows
 
 ## What Pastie can see, and where it puts it
@@ -133,6 +136,12 @@ convention password managers are expected to use (`org.nspasteboard.ConcealedTyp
 actually sets that marker is up to that app, so treat it as a courtesy that usually holds rather
 than a guarantee: if a password manager you rely on does not set it, add it to the excluded list
 instead. Apps on that list are skipped entirely while they are frontmost. Capture types you turn off are never stored.
+
+**Image text recognition.** When you copy an image, Pastie reads the text it contains using
+Apple's Vision framework, entirely on your Mac. The recognized text is indexed for search purposes
+only — it is never stored separately, never displayed, never pasted, and never leaves your machine.
+It applies to images copied after this version; images already in your history remain unsearchable
+until copied again.
 
 **Where it goes.** A SQLite database at:
 
@@ -373,6 +382,7 @@ remains the clip's identity for search and deduplication.
 | Core clipboard manager (v1) | **Shipped** — capture, popup, search, paste, pin, retention, excluded apps, launch at login | This repo |
 | Menu bar + Settings redesign | **Shipped** — four Settings tabs, hotkey remapping UI, per-type capture toggles, row count | This repo |
 | Saved clips, quick-paste slots, transforms, release polish (v3) | **Shipped** — Saved section, slots 1–9 with global hotkeys, rich/plain paste, nine transforms, edit-before-paste, Accessibility onboarding, local crash logs | This repo |
+| Searchable text inside images | **Shipped** — on-device text recognition in copied images, indexed for search, never displayed or pasted | This repo |
 | Multi-machine LAN sync (v2) | **Partial, inert** — wire format, framing, PBKDF2 key derivation, transport, coordinator and a Bonjour/TLS-PSK service are in `Sources/Pastie/Sync/` and under test, but nothing constructs them: no settings, no wiring, no discovery identity. Do not read its presence as a feature. | This repo |
 
 The design documents for the sync track are deliberately kept out of version control, so
