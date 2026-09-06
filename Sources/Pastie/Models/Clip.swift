@@ -30,6 +30,10 @@ struct Clip: Identifiable, Equatable, Codable {
     /// Device ID this clip arrived from; nil for locally-captured clips.
     /// Non-nil is the loop-prevention guard: such clips are never re-broadcast.
     var originDevice: String? = nil
+    /// Text recognised inside an image clip, or nil. Search-only: never pasted, never shown.
+    /// Populated asynchronously after capture, so a freshly copied image is briefly stored
+    /// with `ocrText == nil`.
+    var ocrText: String? = nil
 }
 
 extension Clip: FetchableRecord, MutablePersistableRecord {

@@ -326,4 +326,51 @@ extension ClipStoreTests {
         XCTAssertFalse(all[0].uuid.isEmpty, "migration must backfill a uuid on pre-existing rows")
         XCTAssertNil(all[0].originDevice)
     }
+
+    func testMigrationAddsOCRTextColumnWithoutLosingRows() throws {
+        // A database at migration 3 (createClip + savedAndRichPayload + addSyncColumns is what
+        // ClipStore itself produces), reopened, must gain ocrText as nil and keep its rows.
+        let dbQueue = try DatabaseQueue()
+        let first = try ClipStore(dbQueue: dbQueue, retentionCount: 500)
+        _ = try first.insert(Clip(id: nil, type: .text, textContent: "survivor", imageData: nil, filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
+
+        let reopened = try ClipStore(dbQueue: dbQueue, retentionCount: 500)
+        let all = try reopened.fetchAll()
+
+        XCTAssertEqual(all.count, 1, "migration must not lose rows")
+        XCTAssertEqual(all.first?.textContent, "survivor")
+        XCTAssertNil(all.first?.ocrText, "an existing clip has no recognised text")
+    }
+
+    func testSetOCRTextRoundTrips() throws {
+        let store = try makeStore()
+        let inserted = try store.insert(Clip(id: nil, type: .image, textContent: nil, imageData: Data([0x01]), filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
+        let id = try XCTUnwrap(inserted.id)
+
+        try store.setOCRText("INVOICE 2026-09", id: id)
+
+        XCTAssertEqual(try store.fetchAll().first?.ocrText, "INVOICE 2026-09")
+    }
+
+    func testSetOCRTextOnAMissingRowIsANoOp() throws {
+        let store = try makeStore()
+        let inserted = try store.insert(Clip(id: nil, type: .image, textContent: nil, imageData: Data([0x01]), filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
+        let id = try XCTUnwrap(inserted.id)
+        try store.delete(id: id)
+
+        // Recognition finishes after the clip was evicted or deleted. This must not throw.
+        XCTAssertNoThrow(try store.setOCRText("too late", id: id))
+        XCTAssertTrue(try store.fetchAll().isEmpty)
+    }
+
+    func testSetOCRTextNilClearsIt() throws {
+        let store = try makeStore()
+        let inserted = try store.insert(Clip(id: nil, type: .image, textContent: nil, imageData: Data([0x01]), filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0))
+        let id = try XCTUnwrap(inserted.id)
+        try store.setOCRText("something", id: id)
+
+        try store.setOCRText(nil, id: id)
+
+        XCTAssertNil(try store.fetchAll().first?.ocrText)
+    }
 }

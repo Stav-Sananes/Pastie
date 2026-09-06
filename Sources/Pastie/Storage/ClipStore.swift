@@ -61,6 +61,11 @@ final class ClipStore {
             }
             try db.create(index: "clip_on_uuid", on: "clip", columns: ["uuid"], unique: true)
         }
+        migrator.registerMigration("addOCRText") { db in
+            try db.alter(table: "clip") { t in
+                t.add(column: "ocrText", .text)
+            }
+        }
         try migrator.migrate(dbQueue)
     }
 
@@ -95,6 +100,17 @@ final class ClipStore {
         try dbQueue.write { db in
             if var clip = try Clip.fetchOne(db, key: id) {
                 clip.saved = saved
+                try clip.update(db)
+            }
+        }
+    }
+
+    /// Writes recognised text onto a clip. A no-op when the row is gone — recognition finishes
+    /// after capture, by which time the clip may have been evicted or deleted.
+    func setOCRText(_ text: String?, id: Int64) throws {
+        try dbQueue.write { db in
+            if var clip = try Clip.fetchOne(db, key: id) {
+                clip.ocrText = text
                 try clip.update(db)
             }
         }
