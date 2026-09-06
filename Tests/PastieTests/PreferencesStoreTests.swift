@@ -103,4 +103,21 @@ final class PreferencesStoreTests: XCTestCase {
 
         XCTAssertEqual(store.slotHotkeyModifiers, control)
     }
+
+    func testOCRDefaultsToOn() {
+        let defaults = UserDefaults(suiteName: "PastieTests.ocr.\(UUID().uuidString)")!
+        let store = PreferencesStore(defaults: defaults)
+
+        XCTAssertTrue(store.ocrEnabled, "reading text inside images is on by default")
+    }
+
+    func testOCRSettingRoundTrips() {
+        let defaults = UserDefaults(suiteName: "PastieTests.ocr.\(UUID().uuidString)")!
+        let store = PreferencesStore(defaults: defaults)
+
+        store.ocrEnabled = false
+
+        XCTAssertFalse(store.ocrEnabled)
+        XCTAssertFalse(PreferencesStore(defaults: defaults).ocrEnabled, "the setting survives a fresh store")
+    }
 }

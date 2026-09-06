@@ -97,4 +97,16 @@ final class PreferencesViewModelTests: XCTestCase {
         viewModel.rtfSizeCapMB = 999
         XCTAssertEqual(store.rtfSizeCapBytes, 25 * 1_048_576, "capped at 25MB")
     }
+
+    func testOCRTogglePersistsToTheStore() {
+        let defaults = UserDefaults(suiteName: "PastieTests.vm.ocr.\(UUID().uuidString)")!
+        let store = PreferencesStore(defaults: defaults)
+        let viewModel = PreferencesViewModel(store: store)
+
+        XCTAssertTrue(viewModel.ocrEnabled, "the view model starts from the store's default")
+
+        viewModel.ocrEnabled = false
+
+        XCTAssertFalse(store.ocrEnabled, "the toggle writes through")
+    }
 }

@@ -18,6 +18,7 @@ final class PreferencesStore {
         static let rtfCaptureEnabled = "rtfCaptureEnabled"
         static let rtfSizeCapBytes = "rtfSizeCapBytes"
         static let slotHotkeyModifiers = "slotHotkeyModifiers"
+        static let ocrEnabled = "ocrEnabled"
         static let accessibilityExplainedForVersion = "accessibilityExplainedForVersion"
     }
 
@@ -40,6 +41,14 @@ final class PreferencesStore {
     var rtfSizeCapBytes: Int {
         get { defaults.object(forKey: Keys.rtfSizeCapBytes) as? Int ?? 1_048_576 }
         set { defaults.set(newValue, forKey: Keys.rtfSizeCapBytes) }
+    }
+
+    /// Recognise text inside captured images so they can be searched. On-device; the recognised
+    /// text is never pasted or displayed. `object(forKey:)` rather than `bool(forKey:)` because
+    /// the default is true and an unset key must not read as false.
+    var ocrEnabled: Bool {
+        get { defaults.object(forKey: Keys.ocrEnabled) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.ocrEnabled) }
     }
 
     var retentionCount: Int {

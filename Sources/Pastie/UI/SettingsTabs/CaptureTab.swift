@@ -23,10 +23,12 @@ struct CaptureTab: View {
                     Text("25 MB").tag(25)
                 }
                 .pickerStyle(.segmented)
+                Toggle("Search text inside images", isOn: $viewModel.ocrEnabled)
+                    .disabled(!viewModel.captureImages)
             } header: {
                 Text("Images")
             } footer: {
-                SettingHint("Anything larger is stored as a 400-point-wide thumbnail. The original is not kept.")
+                SettingHint("Anything larger is stored as a 400-point-wide thumbnail. The original is not kept. Text inside images is read on this Mac so you can search for it — it is never pasted or sent anywhere.")
             }
 
             Section {

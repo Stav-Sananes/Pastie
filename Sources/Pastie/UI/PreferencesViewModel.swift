@@ -42,6 +42,9 @@ final class PreferencesViewModel: ObservableObject {
             store.rtfSizeCapBytes = clamped * 1_048_576
         }
     }
+    @Published var ocrEnabled: Bool {
+        didSet { store.ocrEnabled = ocrEnabled }
+    }
     @Published var slotHotkeyModifierChoice: SlotModifierChoice {
         didSet {
             store.slotHotkeyModifiers = UInt32(slotHotkeyModifierChoice.flags.rawValue)
@@ -63,6 +66,7 @@ final class PreferencesViewModel: ObservableObject {
         self.popupRowCount = store.popupRowCount
         self.rtfCaptureEnabled = store.rtfCaptureEnabled
         self.rtfSizeCapMB = store.rtfSizeCapBytes / 1_048_576
+        self.ocrEnabled = store.ocrEnabled
         let storedFlags = NSEvent.ModifierFlags(rawValue: UInt(store.slotHotkeyModifiers))
         self.slotHotkeyModifierChoice = SlotModifierChoice.allCases.first { $0.flags == storedFlags } ?? .optionCommand
         self.hotkeyDisplay = HotkeyFormatter.displayString(keyCode: store.hotkeyKeyCode, modifiers: store.hotkeyModifiers)
