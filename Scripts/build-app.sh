@@ -8,6 +8,9 @@ BUILD_BIN_DIR="${ROOT_DIR}/.build/${CONFIG}"
 OUT_DIR="${ROOT_DIR}/build"
 APP_BUNDLE="${OUT_DIR}/${APP_NAME}.app"
 ZIP_PATH="${OUT_DIR}/${APP_NAME}.app.zip"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${ROOT_DIR}/Resources/Info.plist")"
+DMG_PATH="${OUT_DIR}/${APP_NAME}-${VERSION}.dmg"
+DMG_STAGE="${OUT_DIR}/dmg-stage"
 
 # Signing identity. Defaults to "-", an ad-hoc signature, which is what an unpaid
 # developer can produce: it satisfies arm64's requirement that every binary be signed,
@@ -34,5 +37,18 @@ codesign --verify --verbose "${APP_BUNDLE}"
 # code signature, which a plain `zip` mangles badly enough to break the signature.
 ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${ZIP_PATH}"
 
+# The DMG is the primary download: open it, drag Pastie onto the Applications shortcut, eject.
+# Staging a folder with the bundle plus a symlink to /Applications is what gives the Finder
+# window its drag target. UDZO is the compressed read-only format every downloadable DMG uses.
+# The staged copy is `ditto`'d rather than `cp -R`'d for the same reason the zip is: it keeps
+# the signature intact.
+rm -rf "${DMG_STAGE}"
+mkdir -p "${DMG_STAGE}"
+ditto "${APP_BUNDLE}" "${DMG_STAGE}/${APP_NAME}.app"
+ln -s /Applications "${DMG_STAGE}/Applications"
+hdiutil create -volname "${APP_NAME}" -srcfolder "${DMG_STAGE}" -ov -format UDZO -quiet "${DMG_PATH}"
+rm -rf "${DMG_STAGE}"
+
 echo "Built ${APP_BUNDLE}"
 echo "Packaged ${ZIP_PATH}"
+echo "Packaged ${DMG_PATH}"

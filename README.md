@@ -46,10 +46,13 @@ straight into whatever app you are using.
 
 ## Installing
 
-Download `Pastie.app.zip` from the
-[latest release](https://github.com/Stav-Sananes/Pastie/releases/latest), unzip it, and move
-`Pastie.app` to your Applications folder. Then read the next section, because macOS will not let
-you open it on the first try.
+Download `Pastie-<version>.dmg` from the
+[latest release](https://github.com/Stav-Sananes/Pastie/releases/latest), open it, and drag
+`Pastie` onto the `Applications` shortcut next to it. Eject the disk image, then read the next
+section, because macOS will not let you open the app on the first try.
+
+A `Pastie.app.zip` is attached to each release as well; unzip it and move `Pastie.app` to your
+Applications folder yourself. Both are the same build.
 
 Prefer to build it yourself? See [For developers](#for-developers) — it takes about a minute and
 skips the Gatekeeper problem entirely, because a locally built app is never quarantined.
@@ -378,9 +381,12 @@ not. Nothing above is a promise; it is a record of what has been thought through
 
 ## Distribution
 
-Releases are ad-hoc signed zips attached to GitHub releases. `Scripts/build-app.sh` signs the
-bundle with `codesign --sign -` and packages it with `ditto`, which preserves the signature that
-a plain `zip` would corrupt.
+Releases are an ad-hoc signed disk image and zip attached to GitHub releases.
+`Scripts/build-app.sh` signs the bundle with `codesign --sign -`, packages it with `ditto`, which
+preserves the signature that a plain `zip` would corrupt, and then stages the bundle next to an
+`Applications` symlink and runs `hdiutil create` to produce `build/Pastie-<version>.dmg`. The
+version in the file name is read from `Resources/Info.plist`, so bumping it there is the only
+step.
 
 Ad-hoc is not Developer ID: it satisfies Apple Silicon's requirement that every binary carry a
 signature, but it tells Gatekeeper nothing about who built it, so a downloaded copy is blocked
