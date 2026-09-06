@@ -9,7 +9,7 @@ enum ClipSearch {
             switch clip.type {
             case .text: return clip.textContent?.lowercased().contains(lowered) ?? false
             case .file: return clip.filePath?.lowercased().contains(lowered) ?? false
-            case .image: return false
+            case .image: return clip.ocrText?.lowercased().contains(lowered) ?? false
             }
         }
     }

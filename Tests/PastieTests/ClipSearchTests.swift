@@ -28,4 +28,35 @@ final class ClipSearchTests: XCTestCase {
         let imageClip = Clip(id: nil, type: .image, textContent: nil, imageData: Data([0x01]), filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0)
         XCTAssertEqual(ClipSearch.filter([imageClip], query: "anything").count, 0)
     }
+
+    private func imageClip(ocrText: String?) -> Clip {
+        Clip(id: nil, type: .image, textContent: nil, imageData: Data([0x01]), filePath: nil, sourceApp: nil, timestamp: Date(), saved: false, sortOrder: 0, ocrText: ocrText)
+    }
+
+    func testImageClipMatchesOnRecognisedText() {
+        let clips = [imageClip(ocrText: "Invoice 2026-09 total 480"), imageClip(ocrText: "unrelated")]
+
+        let result = ClipSearch.filter(clips, query: "invoice")
+
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result.first?.ocrText, "Invoice 2026-09 total 480")
+    }
+
+    func testImageMatchingIsCaseInsensitiveLikeTextMatching() {
+        let clips = [imageClip(ocrText: "SHIPPING LABEL")]
+
+        XCTAssertEqual(ClipSearch.filter(clips, query: "shipping").count, 1)
+    }
+
+    func testImageClipWithoutRecognisedTextNeverMatches() {
+        let clips = [imageClip(ocrText: nil)]
+
+        XCTAssertTrue(ClipSearch.filter(clips, query: "anything").isEmpty)
+    }
+
+    func testImageClipsStillSurviveAnEmptyQuery() {
+        let clips = [imageClip(ocrText: nil), imageClip(ocrText: "text")]
+
+        XCTAssertEqual(ClipSearch.filter(clips, query: "").count, 2, "an un-recognised image is still in the history")
+    }
 }
