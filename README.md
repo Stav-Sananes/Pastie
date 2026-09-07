@@ -3,11 +3,13 @@
 A clipboard manager for macOS. It lives in the menu bar, remembers what you copy, and gives it
 back to you with a keystroke.
 
+![Pastie: open the history with ⌥⌘V, find a screenshot by the text inside it, paste it](.github/pastie-demo.gif)
+
 macOS keeps exactly one thing on the clipboard. Copy something else and the previous thing is
 gone. Pastie keeps a history of what you copied, lets you search it, and pastes any entry
 straight into whatever app you are using.
 
-**Status:** working, version 0.4.0. Built for macOS 13 and later. 153 tests pass.
+**Status:** working, version 0.4.0. Built for macOS 13 and later. 158 tests pass.
 
 ---
 
