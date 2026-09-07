@@ -2,7 +2,7 @@ import SwiftUI
 
 // Each tab is a standalone file under SettingsTabs/ taking the shared viewModel.
 // Adding a future tab (e.g. "Groups", "Actions") means: one new file + one new
-// case here — never gate anything elsewhere on "there are 4 tabs".
+// case here — never gate anything elsewhere on "there are 5 tabs".
 struct PreferencesView: View {
     @ObservedObject var viewModel: PreferencesViewModel
 
@@ -16,6 +16,8 @@ struct PreferencesView: View {
                 .tabItem { Label("Capture", systemImage: "tray.and.arrow.down") }
             AppearanceTab(viewModel: viewModel)
                 .tabItem { Label("Appearance", systemImage: "paintbrush") }
+            AboutTab()
+                .tabItem { Label("About", systemImage: "info.circle") }
         }
         // One size for every tab: a Settings window that resizes as you switch tabs reads as a
         // glitch. The tallest tab (Hotkey, with its key reference) sets the height.
