@@ -17,6 +17,8 @@ straight into whatever app you are using.
 - [For developers](#for-developers) — build, test, and the shape of the code
 - [Design notes](#design-notes) — why the odd parts are the way they are
 - [Project status](#project-status) — what exists and what is only planned
+- [Contributing](#contributing) — how to help, and how to say thanks
+- [Licence](#licence) — GPL-3.0
 
 ---
 
@@ -238,7 +240,7 @@ Sources/Pastie/
     PopupWindowController.swift  The search panel: two sections, keys, paste
     ClipEditSheet.swift       Edit-before-paste; never writes to the store
     PreferencesView.swift     Tab container
-    SettingsTabs/             General, Hotkey, Capture, Appearance
+    SettingsTabs/             General, Hotkey, Capture, Appearance, About
     HotkeyRecorderView.swift  "Press a key combination" control
     PreferencesViewModel.swift
   Sync/                       LAN sync, unfinished and wired to nothing (see Project status)
@@ -257,12 +259,13 @@ Sources/Pastie/
     InstalledApp.swift        A bundle identifier resolved to a name and icon
     CrashLogFormatter.swift   Pure formatting of a crash record
     CrashLogger.swift         Handler installation and local log writing
+    ProjectLinks.swift        The repository, issues, licence and tip-jar URLs
 ```
 
 The split is deliberate: **anything with a rule in it is a pure function in its own type**, and
 the AppKit classes are wiring. `CaptureFilter` decides what may be captured but touches no
 pasteboard; `ClipSearch` filters an array; `HotkeyFormatter` formats; a `Transform` is a pure
-function. That is why 153 tests can cover the logic of an app whose interface is untestable — the
+function. That is why 158 tests can cover the logic of an app whose interface is untestable — the
 untestable parts contain no decisions.
 
 ## Testing
@@ -429,6 +432,21 @@ membership for Developer ID signing and notarisation — which would also unlock
 The build script takes a `SIGN_IDENTITY` environment variable so that switch is one variable and
 a notarisation step, not a rewrite.
 
+# Contributing
+
+Pastie is built in spare time and given away. Issues, questions and pull requests are welcome —
+see [CONTRIBUTING.md](CONTRIBUTING.md) for how to build it, what a good bug report contains, and
+what a pull request is expected to bring with it. The short version: run `swift test`, keep
+commits small, and read [CONTEXT.md](CONTEXT.md) first so the words in your change match the
+words in the code.
+
+If Pastie saves you a few minutes a day and you would like to say so, you can
+[buy me a coffee](https://buymeacoffee.com/stav_sananes). It is never expected. The same link is
+on the About tab in Settings.
+
 ## Licence
 
-None yet — all rights reserved by default. If you want to reuse any of this, ask.
+Pastie is free software under the [GNU General Public License v3.0](LICENSE). You may use it,
+read it, change it and share it; anything you build from it must be released under the same
+licence, with the source. That is the deal that keeps it open: nobody can take Pastie, close it,
+and sell it.
