@@ -405,9 +405,9 @@ remains the clip's identity for search and deduplication.
 | Searchable text inside images | **Shipped** — on-device text recognition in copied images, indexed for search, never displayed or pasted | This repo |
 | Multi-machine LAN sync (v2) | **Partial, inert** — wire format, framing, PBKDF2 key derivation, transport, coordinator and a Bonjour/TLS-PSK service are in `Sources/Pastie/Sync/` and under test, but nothing constructs them: no settings, no wiring, no discovery identity. Do not read its presence as a feature. | This repo |
 
-The design documents for the sync track are deliberately kept out of version control, so
-what you can clone is the software that exists rather than a description of software that does
-not. Nothing above is a promise; it is a record of what has been thought through.
+Design documents and plans are deliberately kept out of version control, so what you can clone
+is the software that exists rather than a description of software that does not. Nothing above is
+a promise; it is a record of what has been thought through.
 
 ## Distribution
 
@@ -437,8 +437,8 @@ a notarisation step, not a rewrite.
 Pastie is built in spare time and given away. Issues, questions and pull requests are welcome —
 see [CONTRIBUTING.md](CONTRIBUTING.md) for how to build it, what a good bug report contains, and
 what a pull request is expected to bring with it. The short version: run `swift test`, keep
-commits small, and read [CONTEXT.md](CONTEXT.md) first so the words in your change match the
-words in the code.
+commits small, and use the project's words — Clip, History, Saved, slot, Transform, Capture —
+so your change reads like the code around it.
 
 If Pastie saves you a few minutes a day and you would like to say so, you can
 [buy me a coffee](https://buymeacoffee.com/stav_sananes). It is never expected. The same link is

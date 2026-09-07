@@ -16,9 +16,22 @@ open build/Pastie.app
 ```
 
 The [README](README.md#for-developers) covers the layout of the code and what the tests do and
-do not cover. Read [CONTEXT.md](CONTEXT.md) before you write anything: it defines the words
-(Clip, History, Saved, slot, Transform, Capture) and the words to avoid. A change that says
-"pinned" or "snippet" will be asked to say "Saved".
+do not cover.
+
+## Vocabulary
+
+The code uses a small fixed set of words. A change that uses a different word for the same thing
+will be asked to change it.
+
+| Word | Meaning | Not |
+| --- | --- | --- |
+| **Clip** | One thing that was copied — text, an image or a file reference — with where and when it came from | item, entry, record |
+| **History** | The stream of Clips, newest first, capped by a user-configurable count | list, log, buffer |
+| **Saved** | A Clip the user deliberately kept; exempt from the cap, shown in its own section | pinned, favourite, starred, snippet |
+| **Quick-paste slot** | A numbered position (1–9) that pastes a specific Clip directly | shortcut, binding |
+| **Transform** | A pure function from a Clip's text to different text, applied on the way to being pasted | action, filter, rule |
+| **Capture** | Noticing a pasteboard change and turning it into a Clip | watch, poll, intercept |
+| **Rich payload** | The RTF stored alongside a text Clip's plain string | formatting, styled text |
 
 ## Reporting a bug
 
@@ -46,7 +59,7 @@ anything that sends clipboard contents off the machine, cloud sync, accounts, an
 - **Follow the shape that is there.** Rules in pure types, AppKit classes as wiring, a protocol
   seam wherever a system framework would otherwise reach into a test.
 - **Commit messages say what and why**, in the imperative, like the existing history.
-- **Match the vocabulary** in CONTEXT.md.
+- **Match the vocabulary** above.
 
 Opening an issue first for anything larger than a fix saves both of us the work of a pull request
 that goes a different way than the project.
